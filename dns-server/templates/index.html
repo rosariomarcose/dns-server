@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>DNS Resolver Local</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
@@ -19,6 +20,7 @@
     }
     .container { max-width: 800px; margin: 0 auto; }
     h2, h3 { color: var(--primary); }
+
     .card {
       background: white;
       padding: 20px;
@@ -46,6 +48,7 @@
     .btn-edit { background: #f59e0b; color: white; font-size: 0.8em; padding: 4px 8px; }
     .btn-copy { background: #10b981; color: white; font-size: 0.8em; padding: 4px 8px; }
     .btn-delete { background: var(--danger); color: white; font-size: 0.8em; padding: 4px 8px; }
+
     table {
       width: 100%;
       border-collapse: collapse;
@@ -58,7 +61,9 @@
     }
     th { background: #f3f4f6; }
     tr:hover { background: #f8fafc; }
+
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
     .toast {
       position: fixed;
       bottom: 20px;
@@ -72,11 +77,79 @@
       z-index: 1000;
     }
     .toast.show { opacity: 1; }
+
+    /* MENU SUPERIOR */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .user-menu {
+      position: relative;
+      display: inline-block;
+    }
+    .user-icon {
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+      user-select: none;
+    }
+    .user-icon:hover { background: #1d4ed8; }
+
+    .menu-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      background-color: white;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+      z-index: 999;
+      min-width: 160px;
+    }
+    .menu-item {
+      display: block;
+      width: 100%;
+      padding: 10px 14px;
+      text-align: left;
+      background: none;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      color: #1f2937;
+      text-decoration: none;
+    }
+    .menu-item:hover {
+      background-color: #f3f4f6;
+      color: var(--primary);
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>⚡ Servidor DNS Local (Apenas Rede Interna)</h2>
+
+    <div class="topbar">
+      <h2>⚡ Servidor DNS Local (Apenas Rede Interna)</h2>
+      <div class="user-menu">
+        <div class="user-icon" onclick="toggleMenu()">👤</div>
+        <div class="menu-dropdown" id="menuDropdown">
+          <a href="/admin" class="menu-item">⚙️ Configurações</a>
+          <form method="POST" action="/logout" style="margin:0;">
+            <button type="submit" class="menu-item">🚪 Logout</button>
+          </form>
+        </div>
+      </div>
+    </div>
 
     <div class="card">
       <form method="post" action="/add">
@@ -98,14 +171,10 @@
             <td><strong>{{ domain }}</strong></td>
             <td><code>{{ ip }}</code></td>
             <td class="actions">
-              <button class="btn-copy" onclick="copyToClipboard('{{ ip }}')">
-                📋 Copiar IP
-              </button>
-              <a href="/edit/{{ domain }}">
-                <button class="btn-edit" type="button">✏️ Editar</button>
-              </a>
+              <button class="btn-copy" onclick="copyToClipboard('{{ ip }}')">📋 Copiar IP</button>
+              <a href="/edit/{{ domain }}"><button class="btn-edit" type="button">✏️ Editar</button></a>
               <form method="post" action="/delete/{{ domain }}" style="display:inline;"
-                    onsubmit="return confirm('⚠️ Tem certeza que quer remover\n{{ domain }} → {{ ip }} ?');">
+                onsubmit="return confirm('⚠️ Tem certeza que quer remover\n{{ domain }} → {{ ip }} ?');">
                 <button type="submit" class="btn-delete">🗑️ Remover</button>
               </form>
             </td>
@@ -131,26 +200,25 @@
 
   <script>
     function copyToClipboard(text) {
-      navigator.clipboard.writeText(text).then(() => {
-        showToast('IP copiado: ' + text);
-      }).catch(() => {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-        showToast('IP copiado: ' + text);
-      });
+      navigator.clipboard.writeText(text).then(() => showToast('IP copiado: ' + text));
     }
-
     function showToast(message) {
       const toast = document.getElementById('toast');
       toast.textContent = message;
       toast.classList.add('show');
       setTimeout(() => toast.classList.remove('show'), 3000);
     }
-
+    function toggleMenu() {
+      const menu = document.getElementById('menuDropdown');
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    }
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('menuDropdown');
+      const icon = document.querySelector('.user-icon');
+      if (!icon.contains(e.target) && !menu.contains(e.target)) {
+        menu.style.display = 'none';
+      }
+    });
     {% if success_message %}
       showToast('{{ success_message }}');
     {% endif %}

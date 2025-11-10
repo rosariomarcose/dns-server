@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Administração</title>
+  <style>
+    body { font-family: system-ui; background: #f9fafb; margin: 30px; }
+    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    input, button { padding: 8px; margin: 5px; border-radius: 6px; border: 1px solid #ccc; }
+    button { cursor: pointer; background: #2563eb; color: white; border: none; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { padding: 10px; border-bottom: 1px solid #eee; }
+  </style>
+</head>
+<body>
+  <h2>⚙️ Administração de Usuários</h2>
+  <a href="/">⬅ Voltar</a>
+
+  <div class="card">
+    <h3>Criar novo usuário</h3>
+    <form method="post">
+      <input type="hidden" name="action" value="add">
+      <input name="username" placeholder="Usuário" required>
+      <input name="password" placeholder="Senha" required>
+      <button type="submit">Adicionar</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>Usuários existentes</h3>
+    <table>
+      <tr><th>Usuário</th><th>Admin</th><th>Ações</th></tr>
+      {% for user, info in users.items() %}
+      <tr>
+        <td>{{ user }}</td>
+        <td>{{ "✅" if info.is_admin else "❌" }}</td>
+        <td>
+          {% if user != "admin" %}
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="delete">
+            <input type="hidden" name="username" value="{{ user }}">
+            <button type="submit" style="background:#ef4444;">Excluir</button>
+          </form>
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="action" value="reset">
+            <input type="hidden" name="username" value="{{ user }}">
+            <input type="text" name="new_password" placeholder="Nova senha" required>
+            <button type="submit" style="background:#10b981;">Redefinir</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul>
+        {% for category, msg in messages %}
+          <li>{{ msg }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+</body>
+</html>

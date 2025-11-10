@@ -197,7 +197,63 @@ def admin_panel():
                 save_users(users)
                 flash(f"Senha de {username} redefinida.", "success")
 
-    return render_template("admin.html", users=load_users()) 
+    return render_template("admin.html", users=load_users())
+
+# -----------------------------
+# Troca de senha (admin) — versão segura e estrita
+# -----------------------------
+@app.route("/change_password", methods=["GET", "POST"])
+@login_required
+def change_password():
+    # Apenas o admin pode trocar sua senha
+    if session.get("user") != "admin":
+        flash("Apenas o administrador pode alterar sua senha.", "danger")
+        return redirect("/admin")
+
+    users = load_users()
+
+    if request.method == "POST":
+        current_password = request.form.get("current_password", "").strip()
+        new_password = request.form.get("new_password", "").strip()
+        confirm_password = request.form.get("confirm_password", "").strip()
+
+        # Verifica se os campos estão preenchidos
+        if not current_password or not new_password or not confirm_password:
+            flash("Preencha todos os campos antes de continuar.", "warning")
+            return redirect("/admin")
+
+        # Pega o hash atual do admin
+        admin_data = users.get("admin")
+        if not admin_data or "password" not in admin_data:
+            flash("Erro interno: senha do admin não encontrada.", "danger")
+            return redirect("/admin")
+
+        stored_hash = admin_data["password"].encode()
+
+        # 1️⃣ Confere se a senha atual é correta
+        if not bcrypt.checkpw(current_password.encode(), stored_hash):
+            flash("Senha atual incorreta. Nenhuma alteração foi feita.", "danger")
+            return redirect("/admin")
+
+        # 2️⃣ Confere se a nova senha bate com a confirmação
+        if new_password != confirm_password:
+            flash("A nova senha e a confirmação não são iguais. Nenhuma alteração foi feita.", "warning")
+            return redirect("/admin")
+
+        # 3️⃣ Política mínima de segurança
+        if len(new_password) < 6:
+            flash("A nova senha precisa ter pelo menos 6 caracteres.", "warning")
+            return redirect("/admin")
+
+        # 4️⃣ Tudo certo → salva o novo hash
+        new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        users["admin"]["password"] = new_hash
+        save_users(users)
+
+        flash("Senha alterada com sucesso!", "success")
+        return redirect("/admin")
+
+    return redirect("/admin")
 
 # -----------------------------
 if __name__ == "__main__":

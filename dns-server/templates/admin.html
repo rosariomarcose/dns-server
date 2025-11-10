@@ -10,11 +10,24 @@
     button { cursor: pointer; background: #2563eb; color: white; border: none; }
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { padding: 10px; border-bottom: 1px solid #eee; }
+    .danger { background: #ef4444 !important; }
+    .success { background: #10b981 !important; }
   </style>
 </head>
 <body>
   <h2>⚙️ Administração de Usuários</h2>
   <a href="/">⬅ Voltar</a>
+
+  <!-- Troca de senha do admin -->
+  <div class="card">
+    <h3>Alterar senha do administrador</h3>
+    <form method="post" action="/change_password">
+      <input type="password" name="current_password" placeholder="Senha atual" required>
+      <input type="password" name="new_password" placeholder="Nova senha" required>
+      <input type="password" name="confirm_password" placeholder="Confirmar nova senha" required>
+      <button type="submit" class="success">Alterar senha</button>
+    </form>
+  </div>
 
   <div class="card">
     <h3>Criar novo usuário</h3>
@@ -39,13 +52,13 @@
           <form method="post" style="display:inline;">
             <input type="hidden" name="action" value="delete">
             <input type="hidden" name="username" value="{{ user }}">
-            <button type="submit" style="background:#ef4444;">Excluir</button>
+            <button type="submit" class="danger">Excluir</button>
           </form>
           <form method="post" style="display:inline;">
             <input type="hidden" name="action" value="reset">
             <input type="hidden" name="username" value="{{ user }}">
             <input type="text" name="new_password" placeholder="Nova senha" required>
-            <button type="submit" style="background:#10b981;">Redefinir</button>
+            <button type="submit" class="success">Redefinir</button>
           </form>
           {% endif %}
         </td>

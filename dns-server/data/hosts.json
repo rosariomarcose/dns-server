@@ -1,0 +1,8 @@
+{
+  "hosts": {
+    "dev_api.waybe.com.br": "192.168.5.38",
+    "dev_erp.waybe.com.br": "192.168.5.38",
+    "publicacao_erp.waybe.com.br": "192.168.5.216",
+    "publicacao_api.waybe.com.br": "192.168.5.216"
+  }
+}

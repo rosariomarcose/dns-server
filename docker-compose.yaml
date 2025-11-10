@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  dns-server:
+    image: sifatsistemas/servidor-dns:main
+    container_name: dns-server
+    restart: always
+    privileged: true        # precisa pra usar dhclient dentro do container
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    networks:
+      lan:
+        ipv4_address: 192.168.5.248  # pode fixar um IP ou deixar sem pra DHCP
+    ports:
+      - "8000:8000"
+      - "53:53/udp"
+
+networks:
+  lan:
+    driver: macvlan
+    driver_opts:
+      parent: enX0
+    ipam:
+      config:
+        - subnet: 192.168.4.0/23
+          gateway: 192.168.5.1
+          ip_range: 192.168.5.240/29

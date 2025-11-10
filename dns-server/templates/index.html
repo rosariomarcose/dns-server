@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>DNS Resolver Local</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --danger: #ef4444;
+      --success: #10b981;
+      --gray: #6b7280;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 30px;
+      background: #f9fafb;
+      color: #1f2937;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h2, h3 { color: var(--primary); }
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    form { display: flex; gap: 10px; flex-wrap: wrap; }
+    input {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      flex: 1;
+      min-width: 200px;
+    }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-add { background: var(--primary); color: white; }
+    .btn-add:hover { background: #1d4ed8; }
+    .btn-edit { background: #f59e0b; color: white; font-size: 0.8em; padding: 4px 8px; }
+    .btn-copy { background: #10b981; color: white; font-size: 0.8em; padding: 4px 8px; }
+    .btn-delete { background: var(--danger); color: white; font-size: 0.8em; padding: 4px 8px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    th { background: #f3f4f6; }
+    tr:hover { background: #f8fafc; }
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #333;
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      z-index: 1000;
+    }
+    .toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>⚡ Servidor DNS Local (Apenas Rede Interna)</h2>
+
+    <div class="card">
+      <form method="post" action="/add">
+        <input type="text" name="ip" placeholder="IP interno (ex: 192.168.5.x)" required>
+        <input type="text" name="domain" placeholder="Domínio (ex: app.local)" required>
+        <button type="submit" class="btn-add">➕ Adicionar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Registros Atuais ({{ records|length }})</h3>
+      {% if records|length == 0 %}
+        <p style="color: var(--gray);">Nenhum registro ainda. Adicione acima!</p>
+      {% else %}
+        <table>
+          <tr><th>Domínio</th><th>IP</th><th style="width: 220px;">Ações</th></tr>
+          {% for domain, ip in records %}
+          <tr>
+            <td><strong>{{ domain }}</strong></td>
+            <td><code>{{ ip }}</code></td>
+            <td class="actions">
+              <button class="btn-copy" onclick="copyToClipboard('{{ ip }}')">
+                📋 Copiar IP
+              </button>
+              <a href="/edit/{{ domain }}">
+                <button class="btn-edit" type="button">✏️ Editar</button>
+              </a>
+              <form method="post" action="/delete/{{ domain }}" style="display:inline;"
+                    onsubmit="return confirm('⚠️ Tem certeza que quer remover\n{{ domain }} → {{ ip }} ?');">
+                <button type="submit" class="btn-delete">🗑️ Remover</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </table>
+      {% endif %}
+    </div>
+
+    {% if edit_domain %}
+    <div class="card" style="border: 2px solid #f59e0b;">
+      <h3>✏️ Editando: {{ edit_domain }}</h3>
+      <form method="post" action="/update/{{ edit_domain }}">
+        <input type="text" name="new_ip" value="{{ current_ip }}" required placeholder="Novo IP interno">
+        <button type="submit" class="btn-add">💾 Salvar Alteração</button>
+        <a href="/"><button type="button" style="background:#6b7280;">❌ Cancelar</button></a>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <script>
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast('IP copiado: ' + text);
+      }).catch(() => {
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('IP copiado: ' + text);
+      });
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    {% if success_message %}
+      showToast('{{ success_message }}');
+    {% endif %}
+  </script>
+</body>
+</html>

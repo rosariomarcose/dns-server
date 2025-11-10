@@ -13,7 +13,8 @@ resolver = CustomResolver()
 threading.Thread(target=start_dns_server, args=(resolver,), daemon=True).start()
 threading.Thread(target=health_monitor, args=(resolver,), daemon=True).start()
 
-USERS_FILE = "users.json"
+USERS_FILE = os.path.join("data", "users.json")
+os.makedirs("data", exist_ok=True)
 
 # -----------------------------
 # Funções auxiliares
@@ -79,7 +80,7 @@ def login():
         flash("Usuário ou senha incorretos.", "danger")
     return render_template("login.html")
 
-@app.route("/logout")
+@app.route("/logout", methods=["GET", "POST"])
 def logout():
     session.clear()
     flash("Você saiu da sessão.", "success")

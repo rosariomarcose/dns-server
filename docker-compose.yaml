@@ -3,7 +3,7 @@ services:
     image: sifatsistemas/servidor-dns:main
     container_name: dns-server
     volumes:
-      - ./dns-server/data/hosts.json:/app/data/hosts.json:rw
+      - ./dns-server/data:/app/data:rw
     restart: always
     privileged: true
     cap_add:

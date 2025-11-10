@@ -1,0 +1,10 @@
+{
+  "admin": {
+    "password": "$2b$12$n.SiGDbmT.iEEryP8B0ukeqwzPcCJsclQNzhUWTB2o8lrQtEZC6wq",
+    "is_admin": true
+  },
+  "rosario": {
+    "password": "$2b$12$EObwcoujJdLwAkaJr6X5s.xLzZSWKUSEK0AKo338ZEj1XELgSdHvy",
+    "is_admin": false
+  }
+}

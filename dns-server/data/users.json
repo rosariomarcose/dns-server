@@ -6,5 +6,9 @@
   "rosario": {
     "password": "$2b$12$EObwcoujJdLwAkaJr6X5s.xLzZSWKUSEK0AKo338ZEj1XELgSdHvy",
     "is_admin": false
+  },
+  "junior": {
+    "password": "$2b$12$XREp3kAxeJn2ZVS2J2PWRuxpO/prj0qRa.UTrCcIRvYiibvfEwSZy",
+    "is_admin": false
   }
 }

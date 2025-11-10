@@ -68,17 +68,20 @@
       position: fixed;
       bottom: 20px;
       right: 20px;
-      background: #333;
+      background: rgba(0,0,0,0.9);
       color: white;
       padding: 12px 20px;
       border-radius: 8px;
       opacity: 0;
-      transition: opacity 0.3s;
+      transform: translateY(20px);
+      transition: all 0.3s ease;
       z-index: 1000;
     }
-    .toast.show { opacity: 1; }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
 
-    /* MENU SUPERIOR */
     .topbar {
       display: flex;
       justify-content: space-between;
@@ -171,7 +174,7 @@
             <td><strong>{{ domain }}</strong></td>
             <td><code>{{ ip }}</code></td>
             <td class="actions">
-              <button class="btn-copy" onclick="copyToClipboard('{{ ip }}')">📋 Copiar IP</button>
+              <button type="button" class="btn-copy" data-ip="{{ ip }}">📋 Copiar IP</button>
               <a href="/edit/{{ domain }}"><button class="btn-edit" type="button">✏️ Editar</button></a>
               <form method="post" action="/delete/{{ domain }}" style="display:inline;"
                 onsubmit="return confirm('⚠️ Tem certeza que quer remover\n{{ domain }} → {{ ip }} ?');">
@@ -179,39 +182,56 @@
               </form>
             </td>
           </tr>
+
+          {% if edit_domain == domain %}
+          <tr>
+            <td colspan="3">
+              <div class="card" style="border: 2px solid #f59e0b; margin-top:10px;">
+                <h4>✏️ Editando: {{ edit_domain }}</h4>
+                <form method="post" action="/update/{{ edit_domain }}">
+                  <input type="text" name="new_ip" value="{{ current_ip }}" required placeholder="Novo IP interno">
+                  <button type="submit" class="btn-add">💾 Salvar</button>
+                  <a href="/"><button type="button" style="background:#6b7280;">❌ Cancelar</button></a>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endif %}
           {% endfor %}
         </table>
       {% endif %}
     </div>
 
-    {% if edit_domain %}
-    <div class="card" style="border: 2px solid #f59e0b;">
-      <h3>✏️ Editando: {{ edit_domain }}</h3>
-      <form method="post" action="/update/{{ edit_domain }}">
-        <input type="text" name="new_ip" value="{{ current_ip }}" required placeholder="Novo IP interno">
-        <button type="submit" class="btn-add">💾 Salvar Alteração</button>
-        <a href="/"><button type="button" style="background:#6b7280;">❌ Cancelar</button></a>
-      </form>
-    </div>
-    {% endif %}
   </div>
 
   <div id="toast" class="toast"></div>
 
   <script>
-    function copyToClipboard(text) {
-      navigator.clipboard.writeText(text).then(() => showToast('IP copiado: ' + text));
-    }
+    document.querySelectorAll('.btn-copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const text = btn.getAttribute('data-ip');
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        showToast('📋 IP copiado: ' + text);
+      });
+    });
+
     function showToast(message) {
       const toast = document.getElementById('toast');
       toast.textContent = message;
       toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 3000);
+      setTimeout(() => toast.classList.remove('show'), 2500);
     }
+
     function toggleMenu() {
       const menu = document.getElementById('menuDropdown');
       menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
     }
+
     document.addEventListener('click', (e) => {
       const menu = document.getElementById('menuDropdown');
       const icon = document.querySelector('.user-icon');
@@ -219,6 +239,7 @@
         menu.style.display = 'none';
       }
     });
+
     {% if success_message %}
       showToast('{{ success_message }}');
     {% endif %}

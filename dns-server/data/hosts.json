@@ -1,13 +1,14 @@
 {
   "hosts": {
-    "dev_api.waybe.com.br": "192.168.5.38",
-    "dev_erp.waybe.com.br": "192.168.5.38",
+    "dev_api.waybe.com.br": "192.168.5.37",
+    "dev_erp.waybe.com.br": "192.168.5.37",
     "publicacao_erp.waybe.com.br": "192.168.5.216",
     "publicacao_api.waybe.com.br": "192.168.5.216",
     "homolog_api.waybe.com.br": "192.168.5.20",
     "homolog_erp.waybe.com.br": "192.168.5.20",
-    "erpwaybe_homolog.waybe.com.br": "192.168.5.48",
     "erp_gabriel.waybe.com.br": "192.168.5.175",
-    "api_gabriel.waybe.com.br": "192.168.5.175"
+    "api_gabriel.waybe.com.br": "192.168.5.175",
+    "dns-resolver.waybe.com.br": "192.168.5.248",
+    "erpwaybe_homolog.waybe.com.br": "192.168.5.48"
   }
 }

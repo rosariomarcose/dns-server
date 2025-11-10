@@ -1,17 +1,17 @@
-version: "3.9"
-
 services:
   dns-server:
     image: sifatsistemas/servidor-dns:main
     container_name: dns-server
+    volumes:
+      - ./dns-server/data/hosts.json:/app/data/hosts.json:rw
     restart: always
-    privileged: true        # precisa pra usar dhclient dentro do container
+    privileged: true
     cap_add:
       - NET_ADMIN
       - NET_RAW
     networks:
       lan:
-        ipv4_address: 192.168.5.248  # pode fixar um IP ou deixar sem pra DHCP
+        ipv4_address: 192.168.5.248
     ports:
       - "8000:8000"
       - "53:53/udp"

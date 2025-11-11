@@ -1,6 +1,6 @@
 {
   "hosts": {
-    "local.teste.com.br": "192.168.5.37",
-    "api.teste.com.br": "192.168.5.37"
+    "local.teste.com.br": "192.168.1.37",
+    "api.teste.com.br": "192.168.1.47"
   }
 }

@@ -1,88 +1,163 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <title>Administração</title>
-  <style>
-    body { font-family: system-ui; background: #f9fafb; margin: 30px; }
-    .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin-bottom: 20px; }
-    input, button { padding: 8px; margin: 5px; border-radius: 6px; border: 1px solid #ccc; }
-    button { cursor: pointer; background: #2563eb; color: white; border: none; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { padding: 10px; border-bottom: 1px solid #eee; }
-    .danger { background: #ef4444 !important; }
-    .success { background: #10b981 !important; }
-  </style>
-</head>
-<body>
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <div style="position: sticky; top: 0; z-index: 1000; padding: 10px;">
-        {% for category, msg in messages %}
-          <div style="
-            margin-bottom: 10px;
-            padding: 10px;
-            border-radius: 6px;
-            color: white;
-            background-color: {% if category == 'success' %}#16a34a{% elif category == 'warning' %}#f59e0b{% elif category == 'danger' %}#dc2626{% else %}#2563eb{% endif %};
-          ">
-            {{ msg }}
-          </div>
-        {% endfor %}
-      </div>
-    {% endif %}
-  {% endwith %}
+{% extends "base.html" %}
 
-  <h2>? Administração de Usuários</h2>
-  <a href="{{ url_for('index') }}">? Voltar</a>
+{% block title %}Administração - Painel DNS{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <h2>⚙️ Administração de Usuários</h2>
+    <div>
+      <a href="{{ url_for('index') }}" class="btn-secondary">← Voltar</a>
+    </div>
+  </div>
 
   <!-- Troca de senha do admin -->
   <div class="card">
-    <h3>Alterar senha do administrador</h3>
+    <h3>🔒 Alterar senha do administrador</h3>
     <form method="post" action="/change_password">
-      <input type="password" name="current_password" placeholder="Senha atual" required>
-      <input type="password" name="new_password" placeholder="Nova senha" required>
-      <input type="password" name="confirm_password" placeholder="Confirmar nova senha" required>
-      <button type="submit" class="success">Alterar senha</button>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px;">
+        <div class="form-group">
+          <label for="current_password">Senha atual:</label>
+          <input type="password" id="current_password" name="current_password" placeholder="Senha atual" required>
+        </div>
+        <div class="form-group">
+          <label for="new_password">Nova senha:</label>
+          <input type="password" id="new_password" name="new_password" placeholder="Nova senha" required minlength="6">
+        </div>
+        <div class="form-group">
+          <label for="confirm_password">Confirmar nova senha:</label>
+          <input type="password" id="confirm_password" name="confirm_password" placeholder="Confirmar nova senha" required minlength="6">
+        </div>
+      </div>
+      <button type="submit" class="btn-success">Alterar senha</button>
     </form>
   </div>
 
   <div class="card">
-    <h3>Criar novo usuário</h3>
+    <h3>👥 Criar novo usuário</h3>
     <form method="post">
       <input type="hidden" name="action" value="add">
-      <input name="username" placeholder="Usuário" required>
-      <input name="password" placeholder="Senha" required>
-      <button type="submit">Adicionar</button>
+      <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
+        <div style="flex: 1; min-width: 150px;">
+          <label for="username" style="display: block; margin-bottom: 5px; font-weight: 500;">Usuário:</label>
+          <input type="text" id="username" name="username" placeholder="Nome de usuário" required 
+                 pattern="^[a-zA-Z0-9_-]{3,20}$">
+        </div>
+        <div style="flex: 1; min-width: 150px;">
+          <label for="password" style="display: block; margin-bottom: 5px; font-weight: 500;">Senha:</label>
+          <input type="password" id="password" name="password" placeholder="Senha" required minlength="6">
+        </div>
+        <div>
+          <button type="submit" class="btn-primary">Adicionar Usuário</button>
+        </div>
+      </div>
     </form>
   </div>
 
   <div class="card">
-    <h3>Usuários existentes</h3>
-    <table>
-      <tr><th>Usuário</th><th>Admin</th><th>Ações</th></tr>
-      {% for user, info in users.items() %}
-      <tr>
-        <td>{{ user }}</td>
-        <td>{{ "?" if info.is_admin else "?" }}</td>
-        <td>
-          {% if user != "admin" %}
-          <form method="post" style="display:inline;">
-            <input type="hidden" name="action" value="delete">
-            <input type="hidden" name="username" value="{{ user }}">
-            <button type="submit" class="danger">Excluir</button>
-          </form>
-          <form method="post" style="display:inline;">
-            <input type="hidden" name="action" value="reset">
-            <input type="hidden" name="username" value="{{ user }}">
-            <input type="text" name="new_password" placeholder="Nova senha" required>
-            <button type="submit" class="success">Redefinir</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </table>
+    <h3>📋 Usuários existentes</h3>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th>Usuário</th>
+            <th>Admin</th>
+            <th style="width: 300px;">Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for user, info in users.items() %}
+          <tr>
+            <td><strong>{{ user }}</strong></td>
+            <td>{{ "✅" if info.is_admin else "❌" }}</td>
+            <td class="actions">
+              {% if user != "admin" %}
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="username" value="{{ user }}">
+                <button type="submit" class="btn-danger btn-sm" 
+                        onclick="return confirm('Tem certeza que deseja excluir o usuário {{ user }}?')">
+                  Excluir
+                </button>
+              </form>
+              <form method="post" style="display:inline;">
+                <input type="hidden" name="action" value="reset">
+                <input type="hidden" name="username" value="{{ user }}">
+                <div style="display: inline-flex; gap: 5px;">
+                  <input type="password" name="new_password" placeholder="Nova senha" required minlength="6" 
+                         style="padding: 4px 8px; font-size: 0.8rem; width: 120px;">
+                  <button type="submit" class="btn-success btn-sm">Redefinir</button>
+                </div>
+              </form>
+              {% else %}
+              <span class="text-muted">Ações não disponíveis</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
-</body>
-</html>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Mostrar toast (função reutilizada) - CORRIGIDA
+function showToast(message, type = "success") {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  toast.className = 'toast show';
+  toast.textContent = message;
+
+  switch(type) {
+    case 'success': toast.style.background = 'var(--success)'; break;
+    case 'danger': toast.style.background = 'var(--danger)'; break;
+    case 'warning': toast.style.background = 'var(--warning)'; break;
+    default: toast.style.background = 'var(--gray)';
+  }
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      if (container.contains(toast)) {
+        container.removeChild(toast);
+      }
+    }, 300);
+  }, 3000);
+}
+
+// Flash messages do Flask - CORRIGIDO
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+    {% for category, msg in messages %}
+      showToast({{ msg|tojson }}, {{ category|tojson }});
+    {% endfor %}
+  {% endif %}
+{% endwith %}
+
+// Validação de formulários admin - CORRIGIDO
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('form').forEach(form => {
+    form.addEventListener('submit', function(e) {
+      const password = this.querySelector('input[type="password"]');
+      if (password && password.value.length < 6) {
+        e.preventDefault();
+        showToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
+        return;
+      }
+      
+      const username = this.querySelector('input[name="username"]');
+      if (username && !/^[a-zA-Z0-9_-]{3,20}$/.test(username.value)) {
+        e.preventDefault();
+        showToast('Usuário deve ter 3-20 caracteres (apenas letras, números, _ e -).', 'warning');
+        return;
+      }
+    });
+  });
+});
+</script>
+{% endblock %}

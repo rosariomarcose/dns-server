@@ -1,32 +1,24 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8">
-  <title>Login - Painel DNS</title>
-  <style>
-    body { font-family: system-ui; background: #f9fafb; display:flex; height:100vh; align-items:center; justify-content:center; }
-    .card { background:white; padding:40px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.1); width:320px; }
-    input { width:100%; padding:10px; margin:8px 0; border:1px solid #ddd; border-radius:8px; }
-    button { width:100%; padding:10px; background:#2563eb; color:white; border:none; border-radius:8px; font-weight:600; }
-  </style>
-</head>
-<body>
-  <div class="card">
+{% extends "base.html" %}
+
+{% block title %}Login - Painel DNS{% endblock %}
+
+{% block content %}
+<div class="login-container">
+  <div class="login-card">
     <h2>🔐 Login</h2>
     <form method="post">
-      <input type="text" name="username" placeholder="Usuário" required>
-      <input type="password" name="password" placeholder="Senha" required>
-      <button type="submit">Entrar</button>
+      <div class="form-group">
+        <label for="username">Usuário:</label>
+        <input type="text" id="username" name="username" placeholder="Digite seu usuário" required>
+      </div>
+      
+      <div class="form-group">
+        <label for="password">Senha:</label>
+        <input type="password" id="password" name="password" placeholder="Digite sua senha" required>
+      </div>
+      
+      <button type="submit" class="btn-primary">Entrar</button>
     </form>
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        <ul style="color:red;">
-          {% for category, msg in messages %}
-            <li>{{ msg }}</li>
-          {% endfor %}
-        </ul>
-      {% endif %}
-    {% endwith %}
   </div>
-</body>
-</html>
+</div>
+{% endblock %}

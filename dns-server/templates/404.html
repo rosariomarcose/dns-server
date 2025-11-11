@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block title %}Página Não Encontrada - DNS Resolver{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="card text-center">
+    <h1>404 - Página Não Encontrada</h1>
+    <p>A página que você está procurando não existe.</p>
+    <a href="{{ url_for('index') }}" class="btn-primary">Voltar ao Início</a>
+  </div>
+</div>
+{% endblock %}

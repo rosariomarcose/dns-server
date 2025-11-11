@@ -15,8 +15,26 @@
   </style>
 </head>
 <body>
-  <h2>⚙️ Administração de Usuários</h2>
-  <a href="/">⬅ Voltar</a>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div style="position: sticky; top: 0; z-index: 1000; padding: 10px;">
+        {% for category, msg in messages %}
+          <div style="
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 6px;
+            color: white;
+            background-color: {% if category == 'success' %}#16a34a{% elif category == 'warning' %}#f59e0b{% elif category == 'danger' %}#dc2626{% else %}#2563eb{% endif %};
+          ">
+            {{ msg }}
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <h2>? Administração de Usuários</h2>
+  <a href="{{ url_for('index') }}">? Voltar</a>
 
   <!-- Troca de senha do admin -->
   <div class="card">
@@ -46,7 +64,7 @@
       {% for user, info in users.items() %}
       <tr>
         <td>{{ user }}</td>
-        <td>{{ "✅" if info.is_admin else "❌" }}</td>
+        <td>{{ "?" if info.is_admin else "?" }}</td>
         <td>
           {% if user != "admin" %}
           <form method="post" style="display:inline;">
@@ -66,15 +84,5 @@
       {% endfor %}
     </table>
   </div>
-
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-      <ul>
-        {% for category, msg in messages %}
-          <li>{{ msg }}</li>
-        {% endfor %}
-      </ul>
-    {% endif %}
-  {% endwith %}
 </body>
 </html>

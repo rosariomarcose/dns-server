@@ -4,10 +4,13 @@ from functools import wraps
 from dns_server import CustomResolver, start_dns_server, health_monitor
 
 app = Flask(__name__)
-app.secret_key = "super-secreto-123"
+app.secret_key = os.urandom(24)
 SESSION_TIMEOUT = 600  # 10 minutos
 
+# Inicializa resolver
 resolver = CustomResolver()
+if not hasattr(resolver, "records") or not isinstance(resolver.records, dict):
+    resolver.records = {}
 
 # Inicia DNS e monitor em background
 threading.Thread(target=start_dns_server, args=(resolver,), daemon=True).start()
@@ -92,15 +95,20 @@ def logout():
 @app.route("/")
 @login_required
 def index():
+    # Proteção extra para evitar erros
+    if not hasattr(resolver, "records") or resolver.records is None:
+        resolver.records = {}
+
+    edit_domain = request.args.get("edit")
+    current_ip = resolver.records.get(edit_domain, "") if edit_domain else ""
+
     return render_template(
         "index.html",
         user=session["user"],
         is_admin=session.get("is_admin", False),
         records=sorted(resolver.records.items()),
-        edit_domain=request.args.get("edit"),
-        current_ip=resolver.records.get(request.args.get("edit"), "")
-        if request.args.get("edit")
-        else "",
+        edit_domain=edit_domain,
+        current_ip=current_ip,
     )
 
 # -----------------------------
@@ -117,7 +125,7 @@ def add():
         if ping_result.returncode == 0:
             resolver.records[domain] = ip
             resolver.save()
-            flash(f"Adicionado (online): {domain} → {ip}", "success")
+            flash(f"Adicionado (online): {domain} ? {ip}", "success")
         else:
             flash(f"Erro: IP {ip} offline ou inválido.", "danger")
     else:
@@ -146,7 +154,7 @@ def update(domain):
         if ping_result.returncode == 0:
             resolver.records[domain] = new_ip
             resolver.save()
-            flash(f"Atualizado (online): {domain} → {new_ip}", "success")
+            flash(f"Atualizado (online): {domain} ? {new_ip}", "success")
         else:
             flash(f"Erro: Novo IP {new_ip} offline ou inválido.", "danger")
     else:
@@ -159,7 +167,7 @@ def delete(domain):
     if domain in resolver.records:
         removed = resolver.records.pop(domain)
         resolver.save()
-        flash(f"Removido: {domain} → {removed}", "danger")
+        flash(f"Removido: {domain} ? {removed}", "danger")
     return redirect("/")
 
 # -----------------------------
@@ -176,9 +184,10 @@ def admin_panel():
 
     if request.method == "POST":
         action = request.form.get("action")
-        username = request.form.get("username").strip().lower()
+        username = request.form.get("username", "").strip().lower()
+
         if action == "add":
-            password = request.form.get("password").strip()
+            password = request.form.get("password", "").strip()
             if username and password and username not in users:
                 hashed = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
                 users[username] = {"password": hashed, "is_admin": False}
@@ -186,12 +195,14 @@ def admin_panel():
                 flash(f"Usuário {username} criado com sucesso.", "success")
             else:
                 flash("Usuário já existe ou campos inválidos.", "danger")
+
         elif action == "delete" and username != "admin":
             users.pop(username, None)
             save_users(users)
             flash(f"Usuário {username} removido.", "warning")
+
         elif action == "reset":
-            new_pass = request.form.get("new_password").strip()
+            new_pass = request.form.get("new_password", "").strip()
             if username in users and new_pass:
                 users[username]["password"] = bcrypt.hashpw(new_pass.encode(), bcrypt.gensalt()).decode()
                 save_users(users)
@@ -200,60 +211,50 @@ def admin_panel():
     return render_template("admin.html", users=load_users())
 
 # -----------------------------
-# Troca de senha (admin) — versão segura e estrita
+# Alteração de senha segura para admin
 # -----------------------------
-@app.route("/change_password", methods=["GET", "POST"])
+@app.route("/change_password", methods=["POST"])
 @login_required
 def change_password():
-    # Apenas o admin pode trocar sua senha
     if session.get("user") != "admin":
         flash("Apenas o administrador pode alterar sua senha.", "danger")
         return redirect("/admin")
 
     users = load_users()
+    current_password = request.form.get("current_password", "").strip()
+    new_password = request.form.get("new_password", "").strip()
+    confirm_password = request.form.get("confirm_password", "").strip()
 
-    if request.method == "POST":
-        current_password = request.form.get("current_password", "").strip()
-        new_password = request.form.get("new_password", "").strip()
-        confirm_password = request.form.get("confirm_password", "").strip()
-
-        # Verifica se os campos estão preenchidos
-        if not current_password or not new_password or not confirm_password:
-            flash("Preencha todos os campos antes de continuar.", "warning")
-            return redirect("/admin")
-
-        # Pega o hash atual do admin
-        admin_data = users.get("admin")
-        if not admin_data or "password" not in admin_data:
-            flash("Erro interno: senha do admin não encontrada.", "danger")
-            return redirect("/admin")
-
-        stored_hash = admin_data["password"].encode()
-
-        # 1️⃣ Confere se a senha atual é correta
-        if not bcrypt.checkpw(current_password.encode(), stored_hash):
-            flash("Senha atual incorreta. Nenhuma alteração foi feita.", "danger")
-            return redirect("/admin")
-
-        # 2️⃣ Confere se a nova senha bate com a confirmação
-        if new_password != confirm_password:
-            flash("A nova senha e a confirmação não são iguais. Nenhuma alteração foi feita.", "warning")
-            return redirect("/admin")
-
-        # 3️⃣ Política mínima de segurança
-        if len(new_password) < 6:
-            flash("A nova senha precisa ter pelo menos 6 caracteres.", "warning")
-            return redirect("/admin")
-
-        # 4️⃣ Tudo certo → salva o novo hash
-        new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
-        users["admin"]["password"] = new_hash
-        save_users(users)
-
-        flash("Senha alterada com sucesso!", "success")
+    if not current_password or not new_password or not confirm_password:
+        flash("Preencha todos os campos antes de continuar.", "warning")
         return redirect("/admin")
 
+    stored_hash = users["admin"]["password"].encode()
+
+    if not bcrypt.checkpw(current_password.encode(), stored_hash):
+        flash("Senha atual incorreta. Nenhuma alteração foi feita.", "danger")
+        return redirect("/admin")
+
+    if new_password != confirm_password:
+        flash("A nova senha e a confirmação não são iguais. Nenhuma alteração foi feita.", "warning")
+        return redirect("/admin")
+
+    if len(new_password) < 6:
+        flash("A nova senha precisa ter pelo menos 6 caracteres.", "warning")
+        return redirect("/admin")
+
+    users["admin"]["password"] = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+    save_users(users)
+    flash("Senha alterada com sucesso!", "success")
     return redirect("/admin")
+
+# -----------------------------
+# Novo bloco — tratamento de erro 500 amigável
+# -----------------------------
+@app.errorhandler(500)
+def internal_error(error):
+    flash("Erro interno no servidor. Verifique os registros DNS ou tente novamente.", "danger")
+    return redirect(url_for("index"))
 
 # -----------------------------
 if __name__ == "__main__":
@@ -262,4 +263,4 @@ if __name__ == "__main__":
     Painel: http://localhost:8000
     DNS:    127.0.0.1:53
     """)
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    app.run(host="0.0.0.0", port=8000, debug=True)

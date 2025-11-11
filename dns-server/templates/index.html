@@ -46,7 +46,7 @@
     .btn-add { background: var(--primary); color: white; }
     .btn-add:hover { background: #1d4ed8; }
     .btn-edit { background: #f59e0b; color: white; font-size: 0.8em; padding: 4px 8px; }
-    .btn-copy { background: #10b981; color: white; font-size: 0.8em; padding: 4px 8px; }
+    .btn-copy { background: var(--success); color: white; font-size: 0.8em; padding: 4px 8px; }
     .btn-delete { background: var(--danger); color: white; font-size: 0.8em; padding: 4px 8px; }
 
     table {
@@ -64,24 +64,32 @@
 
     .actions { display: flex; gap: 6px; flex-wrap: wrap; }
 
-    .toast {
+    /* Toast mensagens */
+    #toast-container {
       position: fixed;
-      bottom: 20px;
+      top: 80px; /* 👈 ajustado para ficar visível logo abaixo do topo */
       right: 20px;
-      background: rgba(0,0,0,0.9);
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .toast {
       color: white;
       padding: 12px 20px;
       border-radius: 8px;
       opacity: 0;
       transform: translateY(20px);
       transition: all 0.3s ease;
-      z-index: 1000;
+      font-weight: 600;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
     }
     .toast.show {
       opacity: 1;
       transform: translateY(0);
     }
 
+    /* Topbar e menu usuário */
     .topbar {
       display: flex;
       justify-content: space-between;
@@ -154,6 +162,7 @@
       </div>
     </div>
 
+    <!-- Form adicionar DNS -->
     <div class="card">
       <form method="post" action="/add">
         <input type="text" name="ip" placeholder="IP interno (ex: 192.168.5.x)" required>
@@ -162,6 +171,7 @@
       </form>
     </div>
 
+    <!-- Registros DNS -->
     <div class="card">
       <h3>Registros Atuais ({{ records|length }})</h3>
       {% if records|length == 0 %}
@@ -204,9 +214,42 @@
 
   </div>
 
-  <div id="toast" class="toast"></div>
+  <!-- Toast container -->
+  <div id="toast-container"></div>
 
   <script>
+    // Mostrar toast
+    function showToast(message, type="success") {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast show';
+      toast.textContent = message;
+
+      switch(type) {
+        case 'success': toast.style.background = 'var(--success)'; break;
+        case 'danger': toast.style.background = 'var(--danger)'; break;
+        case 'warning': toast.style.background = '#f59e0b'; break;
+        default: toast.style.background = 'var(--gray)';
+      }
+
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => container.removeChild(toast), 300);
+      }, 3000);
+    }
+
+    // Flash messages do Flask
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          showToast("{{ msg|escapejs }}", "{{ category }}");
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    // Copiar IP
     document.querySelectorAll('.btn-copy').forEach(btn => {
       btn.addEventListener('click', () => {
         const text = btn.getAttribute('data-ip');
@@ -216,17 +259,11 @@
         temp.select();
         document.execCommand('copy');
         document.body.removeChild(temp);
-        showToast('📋 IP copiado: ' + text);
+        showToast('📋 IP copiado: ' + text, 'success');
       });
     });
 
-    function showToast(message) {
-      const toast = document.getElementById('toast');
-      toast.textContent = message;
-      toast.classList.add('show');
-      setTimeout(() => toast.classList.remove('show'), 2500);
-    }
-
+    // Menu usuário
     function toggleMenu() {
       const menu = document.getElementById('menuDropdown');
       menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
@@ -239,10 +276,287 @@
         menu.style.display = 'none';
       }
     });
+  </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>DNS Resolver Local</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --primary: #2563eb;
+      --danger: #ef4444;
+      --success: #10b981;
+      --gray: #6b7280;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 30px;
+      background: #f9fafb;
+      color: #1f2937;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h2, h3 { color: var(--primary); }
 
-    {% if success_message %}
-      showToast('{{ success_message }}');
-    {% endif %}
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+    }
+    form { display: flex; gap: 10px; flex-wrap: wrap; }
+    input {
+      padding: 10px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      flex: 1;
+      min-width: 200px;
+    }
+    button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-add { background: var(--primary); color: white; }
+    .btn-add:hover { background: #1d4ed8; }
+    .btn-edit { background: #f59e0b; color: white; font-size: 0.8em; padding: 4px 8px; }
+    .btn-copy { background: var(--success); color: white; font-size: 0.8em; padding: 4px 8px; }
+    .btn-delete { background: var(--danger); color: white; font-size: 0.8em; padding: 4px 8px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    th { background: #f3f4f6; }
+    tr:hover { background: #f8fafc; }
+
+    .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    /* Toast mensagens */
+    #toast-container {
+      position: fixed;
+      top: 80px; /* 👈 ajustado para ficar visível logo abaixo do topo */
+      right: 20px;
+      z-index: 10000;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .toast {
+      color: white;
+      padding: 12px 20px;
+      border-radius: 8px;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: all 0.3s ease;
+      font-weight: 600;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    /* Topbar e menu usuário */
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .user-menu {
+      position: relative;
+      display: inline-block;
+    }
+    .user-icon {
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.3s;
+      user-select: none;
+    }
+    .user-icon:hover { background: #1d4ed8; }
+
+    .menu-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      background-color: white;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+      border-radius: 8px;
+      margin-top: 8px;
+      overflow: hidden;
+      z-index: 999;
+      min-width: 160px;
+    }
+    .menu-item {
+      display: block;
+      width: 100%;
+      padding: 10px 14px;
+      text-align: left;
+      background: none;
+      border: none;
+      font-size: 14px;
+      cursor: pointer;
+      color: #1f2937;
+      text-decoration: none;
+    }
+    .menu-item:hover {
+      background-color: #f3f4f6;
+      color: var(--primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <div class="topbar">
+      <h2>⚡ Servidor DNS Local (Apenas Rede Interna)</h2>
+      <div class="user-menu">
+        <div class="user-icon" onclick="toggleMenu()">👤</div>
+        <div class="menu-dropdown" id="menuDropdown">
+          <a href="/admin" class="menu-item">⚙️ Configurações</a>
+          <form method="POST" action="/logout" style="margin:0;">
+            <button type="submit" class="menu-item">🚪 Logout</button>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Form adicionar DNS -->
+    <div class="card">
+      <form method="post" action="/add">
+        <input type="text" name="ip" placeholder="IP interno (ex: 192.168.5.x)" required>
+        <input type="text" name="domain" placeholder="Domínio (ex: app.local)" required>
+        <button type="submit" class="btn-add">➕ Adicionar</button>
+      </form>
+    </div>
+
+    <!-- Registros DNS -->
+    <div class="card">
+      <h3>Registros Atuais ({{ records|length }})</h3>
+      {% if records|length == 0 %}
+        <p style="color: var(--gray);">Nenhum registro ainda. Adicione acima!</p>
+      {% else %}
+        <table>
+          <tr><th>Domínio</th><th>IP</th><th style="width: 220px;">Ações</th></tr>
+          {% for domain, ip in records %}
+          <tr>
+            <td><strong>{{ domain }}</strong></td>
+            <td><code>{{ ip }}</code></td>
+            <td class="actions">
+              <button type="button" class="btn-copy" data-ip="{{ ip }}">📋 Copiar IP</button>
+              <a href="/edit/{{ domain }}"><button class="btn-edit" type="button">✏️ Editar</button></a>
+              <form method="post" action="/delete/{{ domain }}" style="display:inline;"
+                onsubmit="return confirm('⚠️ Tem certeza que quer remover\n{{ domain }} → {{ ip }} ?');">
+                <button type="submit" class="btn-delete">🗑️ Remover</button>
+              </form>
+            </td>
+          </tr>
+
+          {% if edit_domain == domain %}
+          <tr>
+            <td colspan="3">
+              <div class="card" style="border: 2px solid #f59e0b; margin-top:10px;">
+                <h4>✏️ Editando: {{ edit_domain }}</h4>
+                <form method="post" action="/update/{{ edit_domain }}">
+                  <input type="text" name="new_ip" value="{{ current_ip }}" required placeholder="Novo IP interno">
+                  <button type="submit" class="btn-add">💾 Salvar</button>
+                  <a href="/"><button type="button" style="background:#6b7280;">❌ Cancelar</button></a>
+                </form>
+              </div>
+            </td>
+          </tr>
+          {% endif %}
+          {% endfor %}
+        </table>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <script>
+    // Mostrar toast
+    function showToast(message, type="success") {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      toast.className = 'toast show';
+      toast.textContent = message;
+
+      switch(type) {
+        case 'success': toast.style.background = 'var(--success)'; break;
+        case 'danger': toast.style.background = 'var(--danger)'; break;
+        case 'warning': toast.style.background = '#f59e0b'; break;
+        default: toast.style.background = 'var(--gray)';
+      }
+
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => container.removeChild(toast), 300);
+      }, 3000);
+    }
+
+    // Flash messages do Flask
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          showToast("{{ msg|escapejs }}", "{{ category }}");
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    // Copiar IP
+    document.querySelectorAll('.btn-copy').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const text = btn.getAttribute('data-ip');
+        const temp = document.createElement('textarea');
+        temp.value = text;
+        document.body.appendChild(temp);
+        temp.select();
+        document.execCommand('copy');
+        document.body.removeChild(temp);
+        showToast('📋 IP copiado: ' + text, 'success');
+      });
+    });
+
+    // Menu usuário
+    function toggleMenu() {
+      const menu = document.getElementById('menuDropdown');
+      menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+    }
+
+    document.addEventListener('click', (e) => {
+      const menu = document.getElementById('menuDropdown');
+      const icon = document.querySelector('.user-icon');
+      if (!icon.contains(e.target) && !menu.contains(e.target)) {
+        menu.style.display = 'none';
+      }
+    });
   </script>
 </body>
 </html>

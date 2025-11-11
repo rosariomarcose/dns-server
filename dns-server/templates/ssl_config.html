@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <h2>🔒 Configuração SSL</h2>
+    <div class="user-menu">
+      <div class="user-icon" onclick="toggleMenu()">👤</div>
+      <div class="menu-dropdown" id="menuDropdown">
+        {% if session.get('is_admin') %}
+          <a href="/admin" class="menu-item">⚙️ Configurações</a>
+        {% endif %}
+        <form method="POST" action="/logout" style="margin:0;">
+          <button type="submit" class="menu-item">🚪 Logout</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Configuração SSL para: <code>{{ domain }}</code></h3>
+    <p><strong>IP:</strong> <code>{{ ip }}</code></p>
+    
+    <form method="post">
+      <div class="form-group">
+        <label class="checkbox-label">
+          <input type="checkbox" name="ssl_enabled" {{ 'checked' if ssl_info.ssl_enabled }}>
+          <span class="checkmark"></span>
+          Habilitar SSL/HTTPS para este domínio
+        </label>
+        <small class="text-muted">
+          Quando habilitado, o sistema indicará que este domínio deve ser acessado via HTTPS
+        </small>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="http_port">Porta HTTP:</label>
+          <input type="number" id="http_port" name="http_port" value="{{ ssl_info.http_port }}" min="1" max="65535">
+        </div>
+        
+        <div class="form-group">
+          <label for="ssl_port">Porta HTTPS:</label>
+          <input type="number" id="ssl_port" name="ssl_port" value="{{ ssl_info.ssl_port }}" min="1" max="65535">
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn-primary">💾 Salvar Configuração</button>
+        <a href="/" class="btn-secondary">← Voltar</a>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h4>ℹ️ Como funciona</h4>
+    <ul>
+      <li><strong>SSL Habilitado:</strong> O DNS retornará informações indicando que o domínio suporta HTTPS</li>
+      <li><strong>SSL Desabilitado:</strong> O domínio será tratado como HTTP normal</li>
+      <li><strong>Portas:</strong> Configure as portas específicas usadas pelo seu serviço</li>
+    </ul>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleMenu() {
+  const menu = document.getElementById('menuDropdown');
+  if (menu) {
+    menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('menuDropdown');
+  const icon = document.querySelector('.user-icon');
+  
+  if (menu && icon && !icon.contains(e.target) && !menu.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+</script>
+{% endblock %}

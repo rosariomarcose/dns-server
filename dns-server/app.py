@@ -1,29 +1,37 @@
 from flask import Flask, render_template, request, redirect, flash, url_for, session
 import threading, subprocess, json, os, time, bcrypt, re, ipaddress
 from functools import wraps
+import sys
+import logging
+
+# Adiciona o diretório atual ao path
+sys.path.append('/app')
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 SESSION_TIMEOUT = 600  # 10 minutos
 
-# Inicializa resolver (assumindo que dns_server.py existe)
-try:
-    from dns_server import CustomResolver, start_dns_server, health_monitor
-    resolver = CustomResolver()
-    if not hasattr(resolver, "records") or not isinstance(resolver.records, dict):
-        resolver.records = {}
-    
-    # Inicia DNS e monitor em background
-    threading.Thread(target=start_dns_server, args=(resolver,), daemon=True).start()
-    threading.Thread(target=health_monitor, args=(resolver,), daemon=True).start()
-except ImportError:
-    print("⚠️  Módulo dns_server não encontrado. Executando em modo simulação.")
-    class MockResolver:
-        def __init__(self):
-            self.records = {}
-        def save(self):
-            pass
-    resolver = MockResolver()
+# Caminho absoluto para o arquivo de dados
+DATA_DIR = "/app/data"
+USERS_FILE = os.path.join(DATA_DIR, "users.json")
+HOSTS_FILE = os.path.join(DATA_DIR, "hosts.json")
+
+# Garante que o diretório data existe
+os.makedirs(DATA_DIR, exist_ok=True)
+
+# Inicializa resolver DNS
+print("🚀 Iniciando servidor DNS...")
+
+# Importa e inicia o DNS server
+from dns_server import CustomResolver, start_dns_server, health_monitor
+
+resolver = CustomResolver()
+print("✅ DNS Server inicializado")
+
+# Inicia DNS e monitor em background
+threading.Thread(target=start_dns_server, args=(resolver,), daemon=True).start()
+threading.Thread(target=health_monitor, args=(resolver,), daemon=True).start()
+print("✅ Servidor DNS iniciado com sucesso!")
 
 USERS_FILE = os.path.join("data", "users.json")
 os.makedirs("data", exist_ok=True)
@@ -32,6 +40,16 @@ os.makedirs("static/css", exist_ok=True)
 # -----------------------------
 # Funções auxiliares
 # -----------------------------
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)  # Oculta logs do Werkzeug
+
+@app.after_request
+def after_request(response):
+    """Oculta logs 400 de handshake SSL"""
+    if response.status_code == 400 and 'Bad request version' in response.description:
+        return response
+    return response
+
 def load_users():
     if not os.path.exists(USERS_FILE):
         # Cria admin padrão com senha hash
@@ -140,103 +158,211 @@ def index():
         records=sorted(resolver.records.items()),
         edit_domain=edit_domain,
         current_ip=current_ip,
+        resolver=resolver
     )
 
 # -----------------------------
-# Rotas de CRUD DNS
+# Rotas de CRUD DNS - CORRIGIDAS
 # -----------------------------
 @app.route("/add", methods=["POST"])
 @login_required
 def add():
-    domain = sanitize_input(request.form["domain"]).lower()
-    ip = sanitize_input(request.form["ip"])
-    
-    if not domain or not ip:
-        flash("Domínio e IP são obrigatórios.", "danger")
-        return redirect("/")
-    
-    if not validate_domain(domain):
-        flash("Domínio inválido. Use apenas letras, números e hífens.", "danger")
-        return redirect("/")
-    
-    if not validate_ip(ip):
-        flash("IP inválido. Use apenas IPs privados (192.168.x.x, 10.x.x.x, 172.16-31.x.x).", "danger")
-        return redirect("/")
-    
-    # Verifica se o IP está online
     try:
-        ping_result = subprocess.run(
-            ["ping", "-c", "1", "-W", "2", ip],
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL,
-            timeout=5
-        )
-        if ping_result.returncode == 0:
-            resolver.records[domain] = ip
-            resolver.save()
-            flash(f"Adicionado (online): {domain} → {ip}", "success")
-        else:
-            flash(f"⚠️ IP {ip} offline, mas registro adicionado.", "warning")
-            resolver.records[domain] = ip
-            resolver.save()
-    except (subprocess.TimeoutExpired, Exception):
-        flash(f"⚠️ Não foi possível verificar o IP {ip}, mas registro adicionado.", "warning")
-        resolver.records[domain] = ip
-        resolver.save()
+        domain = sanitize_input(request.form["domain"]).lower()
+        ip = sanitize_input(request.form["ip"])
+        ssl_enabled = request.form.get("ssl_enabled") == "on"
+        ssl_port = int(request.form.get("ssl_port", 443))
+        http_port = int(request.form.get("http_port", 80))
+        
+        if not domain or not ip:
+            flash("Domínio e IP são obrigatórios.", "danger")
+            return redirect("/")
+        
+        if not validate_domain(domain):
+            flash("Domínio inválido. Use apenas letras, números e hífens.", "danger")
+            return redirect("/")
+        
+        if not validate_ip(ip):
+            flash("IP inválido. Use apenas IPs privados (192.168.x.x, 10.x.x.x, 172.16-31.x.x).", "danger")
+            return redirect("/")
+        
+        # Verifica se o domínio já existe
+        if domain in resolver.records:
+            flash(f"Domínio {domain} já existe.", "danger")
+            return redirect("/")
+        
+        # Verifica se o IP está online
+        try:
+            ping_result = subprocess.run(
+                ["ping", "-c", "1", "-W", "2", ip],
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            if ping_result.returncode == 0:
+                resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
+                status = " (SSL)" if ssl_enabled else ""
+                flash(f"Adicionado (online{status}): {domain} → {ip}", "success")
+            else:
+                resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
+                status = " (SSL)" if ssl_enabled else ""
+                flash(f"⚠️ IP {ip} offline, mas registro adicionado{status}.", "warning")
+        except (subprocess.TimeoutExpired, Exception):
+            resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
+            status = " (SSL)" if ssl_enabled else ""
+            flash(f"⚠️ Não foi possível verificar o IP {ip}, mas registro adicionado{status}.", "warning")
+        
+    except Exception as e:
+        flash(f"Erro ao adicionar registro: {e}", "danger")
     
     return redirect("/")
 
+# Adicione esta rota para configuração SSL
+@app.route("/ssl/<domain>", methods=["GET", "POST"])
+@login_required
+def ssl_config(domain):
+    if domain not in resolver.records:
+        flash("Domínio não encontrado.", "danger")
+        return redirect("/")
+    
+    ssl_info = resolver.get_ssl_info(domain)
+    
+    if request.method == "POST":
+        try:
+            ssl_enabled = request.form.get("ssl_enabled") == "on"
+            ssl_port = int(request.form.get("ssl_port", 443))
+            http_port = int(request.form.get("http_port", 80))
+            
+            if resolver.update_ssl_config(domain, 
+                                        ssl_enabled=ssl_enabled,
+                                        ssl_port=ssl_port,
+                                        http_port=http_port):
+                status = "habilitado" if ssl_enabled else "desabilitado"
+                flash(f"Configuração SSL para {domain} {status} com sucesso!", "success")
+            else:
+                flash("Erro ao atualizar configuração SSL.", "danger")
+        except Exception as e:
+            flash(f"Erro ao atualizar SSL: {e}", "danger")
+        
+        return redirect("/")
+    
+    return render_template("ssl_config.html",
+                         domain=domain,
+                         ip=resolver.records[domain],
+                         ssl_info=ssl_info,
+                         user=session["user"],
+                         is_admin=session.get("is_admin", False))
+
+# Rota para editar DOMÍNIO (não apenas IP) - CORRIGIDA
 @app.route("/edit/<domain>")
 @login_required
-def edit(domain):
+def edit_domain(domain):  # Mudei o nome da função para evitar conflito
     if domain in resolver.records:
         return redirect(url_for("index", edit=domain))
     flash("Domínio não encontrado.", "danger")
     return redirect("/")
 
-@app.route("/update/<domain>", methods=["POST"])
+@app.route("/update/<old_domain>", methods=["POST"])
 @login_required
-def update(domain):
-    new_ip = sanitize_input(request.form["new_ip"])
-    
-    if not new_ip:
-        flash("IP é obrigatório.", "danger")
-        return redirect("/")
-    
-    if not validate_ip(new_ip):
-        flash("IP inválido. Use apenas IPs privados.", "danger")
-        return redirect("/")
-    
-    if domain not in resolver.records:
-        flash("Domínio não encontrado.", "danger")
-        return redirect("/")
-    
-    # Verifica se o IP está online
+def update_domain(old_domain):  # Mudei o nome da função
     try:
-        ping_result = subprocess.run(
-            ["ping", "-c", "1", "-W", "2", new_ip],
-            stdout=subprocess.DEVNULL, 
-            stderr=subprocess.DEVNULL,
-            timeout=5
-        )
-        if ping_result.returncode == 0:
-            resolver.records[domain] = new_ip
-            resolver.save()
-            flash(f"Atualizado (online): {domain} → {new_ip}", "success")
-        else:
-            flash(f"⚠️ IP {new_ip} offline, mas registro atualizado.", "warning")
-            resolver.records[domain] = new_ip
-            resolver.save()
-    except (subprocess.TimeoutExpired, Exception):
-        flash(f"⚠️ Não foi possível verificar o IP {new_ip}, mas registro atualizado.", "warning")
-        resolver.records[domain] = new_ip
-        resolver.save()
+        new_domain = sanitize_input(request.form.get("new_domain", "")).lower()
+        new_ip = sanitize_input(request.form["new_ip"])
+        
+        if not new_ip:
+            flash("IP é obrigatório.", "danger")
+            return redirect("/")
+        
+        if not validate_ip(new_ip):
+            flash("IP inválido. Use apenas IPs privados.", "danger")
+            return redirect("/")
+        
+        if old_domain not in resolver.records:
+            flash("Domínio não encontrado.", "danger")
+            return redirect("/")
+        
+        # Se o domínio foi alterado, verifica se o novo domínio já existe
+        if new_domain and new_domain != old_domain:
+            if new_domain in resolver.records:
+                flash(f"Domínio {new_domain} já existe.", "danger")
+                return redirect("/")
+        
+        # Verifica se o IP está online
+        try:
+            ping_result = subprocess.run(
+                ["ping", "-c", "1", "-W", "2", new_ip],
+                stdout=subprocess.DEVNULL, 
+                stderr=subprocess.DEVNULL,
+                timeout=5
+            )
+            if ping_result.returncode == 0:
+                # Se o domínio foi alterado, remove o antigo e adiciona o novo
+                if new_domain and new_domain != old_domain:
+                    old_ip = resolver.records[old_domain]
+                    ssl_info = resolver.get_ssl_info(old_domain)
+                    
+                    # Remove o domínio antigo
+                    del resolver.records[old_domain]
+                    
+                    # Adiciona com o novo domínio mantendo as configurações SSL
+                    resolver.add_host(
+                        new_domain, 
+                        new_ip, 
+                        ssl_info["ssl_enabled"],
+                        ssl_info["ssl_port"],
+                        ssl_info["http_port"]
+                    )
+                    flash(f"Atualizado (online): {old_domain} → {new_domain} → {new_ip}", "success")
+                else:
+                    # Apenas atualiza o IP
+                    resolver.records[old_domain] = new_ip
+                    resolver.save()
+                    flash(f"Atualizado (online): {old_domain} → {new_ip}", "success")
+            else:
+                if new_domain and new_domain != old_domain:
+                    old_ip = resolver.records[old_domain]
+                    ssl_info = resolver.get_ssl_info(old_domain)
+                    
+                    del resolver.records[old_domain]
+                    resolver.add_host(
+                        new_domain, 
+                        new_ip, 
+                        ssl_info["ssl_enabled"],
+                        ssl_info["ssl_port"],
+                        ssl_info["http_port"]
+                    )
+                    flash(f"⚠️ IP {new_ip} offline, mas registro atualizado: {old_domain} → {new_domain}", "warning")
+                else:
+                    resolver.records[old_domain] = new_ip
+                    resolver.save()
+                    flash(f"⚠️ IP {new_ip} offline, mas registro atualizado.", "warning")
+        except (subprocess.TimeoutExpired, Exception):
+            if new_domain and new_domain != old_domain:
+                old_ip = resolver.records[old_domain]
+                ssl_info = resolver.get_ssl_info(old_domain)
+                
+                del resolver.records[old_domain]
+                resolver.add_host(
+                    new_domain, 
+                    new_ip, 
+                    ssl_info["ssl_enabled"],
+                    ssl_info["ssl_port"],
+                    ssl_info["http_port"]
+                )
+                flash(f"⚠️ Não foi possível verificar o IP {new_ip}, mas registro atualizado: {old_domain} → {new_domain}", "warning")
+            else:
+                resolver.records[old_domain] = new_ip
+                resolver.save()
+                flash(f"⚠️ Não foi possível verificar o IP {new_ip}, mas registro atualizado.", "warning")
+                
+    except Exception as e:
+        flash(f"Erro ao atualizar: {e}", "danger")
     
     return redirect("/")
 
 @app.route("/delete/<domain>", methods=["POST"])
 @login_required
-def delete(domain):
+def delete_domain(domain):  # Mudei o nome da função
     if domain in resolver.records:
         removed_ip = resolver.records.pop(domain)
         resolver.save()

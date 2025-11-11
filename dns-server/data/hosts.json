@@ -10,5 +10,20 @@
     "api_gabriel.waybe.com.br": "192.168.5.175",
     "dns-resolver.waybe.com.br": "192.168.5.248",
     "erpwaybe_homolog.waybe.com.br": "192.168.5.48"
+  },
+  "ssl_enabled": {
+    "public.sifat.com.br": true,
+    "dns-resolver.waybe.com.br": true,
+    "publicacao_api.waybe.com.br": true
+  },
+  "ssl_ports": {
+    "public.sifat.com.br": 443,
+    "dns-resolver.waybe.com.br": 443,
+    "publicacao_api.waybe.com.br": 443
+  },
+  "http_ports": {
+    "public.sifat.com.br": 80,
+    "dns-resolver.waybe.com.br": 80,
+    "publicacao_api.waybe.com.br": 80
   }
 }

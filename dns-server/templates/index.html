@@ -17,7 +17,7 @@
     </div>
   </div>
 
-  <!-- Form adicionar DNS -->
+  <!-- Form adicionar DNS COM SSL -->
   <div class="card">
     <form method="post" action="/add" id="add-form">
       <div style="display: flex; gap: 10px; flex-wrap: wrap;">
@@ -35,6 +35,27 @@
           <button type="submit" class="btn-primary">➕ Adicionar</button>
         </div>
       </div>
+      
+      <!-- Configurações SSL -->
+      <div style="margin-top: 15px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+        <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+          <div>
+            <label class="checkbox-label">
+              <input type="checkbox" name="ssl_enabled" id="ssl_enabled">
+              <span class="checkmark"></span>
+              Habilitar SSL/HTTPS
+            </label>
+          </div>
+          <div>
+            <label for="http_port" style="font-size: 12px; font-weight: 500;">Porta HTTP:</label>
+            <input type="number" id="http_port" name="http_port" value="80" min="1" max="65535" style="width: 80px; padding: 4px;">
+          </div>
+          <div>
+            <label for="ssl_port" style="font-size: 12px; font-weight: 500;">Porta HTTPS:</label>
+            <input type="number" id="ssl_port" name="ssl_port" value="443" min="1" max="65535" style="width: 80px; padding: 4px;">
+          </div>
+        </div>
+      </div>
     </form>
   </div>
 
@@ -50,7 +71,8 @@
             <tr>
               <th>Domínio</th>
               <th>IP</th>
-              <th style="width: 220px;">Ações</th>
+              <th>SSL</th>
+              <th style="width: 250px;">Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -58,9 +80,25 @@
             <tr>
               <td><strong>{{ domain }}</strong></td>
               <td><code class="code">{{ ip }}</code></td>
+              <td>
+                {% set ssl_info = resolver.get_ssl_info(domain) %}
+                {% if ssl_info.ssl_enabled %}
+                  <span style="color: #10b981; font-weight: bold;">🔒 HTTPS</span>
+                {% else %}
+                  <span style="color: #6b7280;">🔓 HTTP</span>
+                {% endif %}
+              </td>
               <td class="actions">
                 <button type="button" class="btn-success btn-sm btn-copy" data-ip="{{ ip }}" onclick="event.stopPropagation();">📋 Copiar IP</button>
-                <a href="/edit/{{ domain }}">
+                
+                <!-- Botão SSL -->
+                <a href="/ssl/{{ domain }}">
+                  <button class="btn-info btn-sm" type="button" onclick="event.stopPropagation();">
+                    {{ '🔧 SSL' if ssl_info.ssl_enabled else '⚙️ SSL' }}
+                  </button>
+                </a>
+                
+                <a href="{{ url_for('edit_domain', domain=domain) }}">
                   <button class="btn-warning btn-sm" type="button" onclick="event.stopPropagation();">✏️ Editar</button>
                 </a>
                 <form method="post" action="/delete/{{ domain }}" style="display:inline;"
@@ -72,13 +110,19 @@
 
             {% if edit_domain == domain %}
             <tr>
-              <td colspan="3">
+              <td colspan="4">
                 <div class="card" style="border: 2px solid #f59e0b; margin-top:10px;">
                   <h4>✏️ Editando: {{ edit_domain }}</h4>
-                  <form method="post" action="/update/{{ edit_domain }}">
+                  <form method="post" action="{{ url_for('update_domain', old_domain=edit_domain) }}">
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
                       <div style="flex: 1; min-width: 200px;">
-                        <label for="new_ip" style="display: block; margin-bottom: 5px; font-weight: 500;">Novo IP interno:</label>
+                        <label for="new_domain" style="display: block; margin-bottom: 5px; font-weight: 500;">Domínio:</label>
+                        <input type="text" id="new_domain" name="new_domain" value="{{ edit_domain }}" required 
+                               placeholder="Domínio"
+                               pattern="^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$">
+                      </div>
+                      <div style="flex: 1; min-width: 200px;">
+                        <label for="new_ip" style="display: block; margin-bottom: 5px; font-weight: 500;">IP interno:</label>
                         <input type="text" id="new_ip" name="new_ip" value="{{ current_ip }}" required 
                                placeholder="Novo IP interno"
                                pattern="^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})$">
@@ -130,7 +174,7 @@ function showToast(message, type = "success") {
   }, 3000);
 }
 
-// Flash messages do Flask - CORRIGIDO
+// Flash messages do Flask
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
     {% for category, msg in messages %}
@@ -139,14 +183,12 @@ function showToast(message, type = "success") {
   {% endif %}
 {% endwith %}
 
-// Copiar IP - CORRIGIDO
+// Copiar IP
 function setupCopyButtons() {
   document.querySelectorAll('.btn-copy').forEach(btn => {
-    // Remove event listeners existentes para evitar duplicação
     btn.replaceWith(btn.cloneNode(true));
   });
 
-  // Re-attach event listeners aos novos botões
   document.querySelectorAll('.btn-copy').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.preventDefault();
@@ -156,11 +198,9 @@ function setupCopyButtons() {
       if (!text) return;
 
       try {
-        // Método moderno
         await navigator.clipboard.writeText(text);
         showToast('📋 IP copiado: ' + text, 'success');
       } catch (err) {
-        // Fallback para navegadores antigos
         try {
           const temp = document.createElement('textarea');
           temp.value = text;
@@ -184,7 +224,7 @@ function setupCopyButtons() {
   });
 }
 
-// Menu usuário - CORRIGIDO
+// Menu usuário
 function toggleMenu() {
   const menu = document.getElementById('menuDropdown');
   if (menu) {
@@ -192,7 +232,7 @@ function toggleMenu() {
   }
 }
 
-// Fechar menu ao clicar fora - CORRIGIDO
+// Fechar menu ao clicar fora
 document.addEventListener('click', (e) => {
   const menu = document.getElementById('menuDropdown');
   const icon = document.querySelector('.user-icon');
@@ -202,7 +242,7 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Validação client-side - CORRIGIDO
+// Validação client-side
 const addForm = document.getElementById('add-form');
 if (addForm) {
   addForm.addEventListener('submit', function(e) {
@@ -223,15 +263,10 @@ if (addForm) {
   });
 }
 
-// Funções de validação - CORRIGIDAS
+// Funções de validação
 function isValidIP(ip) {
-  // Padrão para IPs privados:
-  // - 192.168.x.x
-  // - 10.x.x.x  
-  // - 172.16.x.x to 172.31.x.x
   const pattern = /^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})$/;
   
-  // Verifica também cada octeto (0-255)
   if (pattern.test(ip)) {
     const parts = ip.split('.');
     for (let part of parts) {

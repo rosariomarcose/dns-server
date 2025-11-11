@@ -11,7 +11,7 @@ services:
       - NET_RAW
     networks:
       lan:
-        ipv4_address: 192.168.5.248
+        ipv4_address: 192.168.1.254   # IP do container
     ports:
       - "8000:8000"
       - "53:53/udp"
@@ -20,9 +20,9 @@ networks:
   lan:
     driver: macvlan
     driver_opts:
-      parent: enX0
+      parent: enX0   # Interface física real
     ipam:
       config:
-        - subnet: 192.168.4.0/23
-          gateway: 192.168.5.1
-          ip_range: 192.168.5.240/29
+        - subnet: 192.168.1.0/24   # Rede completa da LAN
+          gateway: 192.168.1.1  # Roteador / gateway padrão
+          ip_range: 192.168.1.240/29   # Bloco reservado p/ containers (Pode alterar para uma configuração mais básica)

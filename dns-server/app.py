@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, flash, url_for, session
+from flask import Flask, render_template, request, redirect, flash, url_for, session, jsonify
 import threading, subprocess, json, os, time, bcrypt, re, ipaddress
 from functools import wraps
 import sys
@@ -7,9 +7,23 @@ import logging
 # Adiciona o diretório atual ao path
 sys.path.append('/app')
 
-app = Flask(__name__)
+# CONFIGURAÇÃO CORRIGIDA DO TEMPLATE FOLDER
+template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
+static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+
+app = Flask(__name__, 
+            template_folder=template_dir,
+            static_folder=static_dir)
 app.secret_key = os.urandom(24)
 SESSION_TIMEOUT = 600  # 10 minutos
+
+# Log de diagnóstico
+print(f"🔧 Configurando Flask...")
+print(f"📁 Template folder: {app.template_folder}")
+print(f"📁 Static folder: {app.static_folder}")
+print(f"📁 Templates existem: {os.path.exists(app.template_folder)}")
+if os.path.exists(app.template_folder):
+    print(f"📁 Arquivos templates: {os.listdir(app.template_folder)}")
 
 # Caminho absoluto para o arquivo de dados
 DATA_DIR = "/app/data"
@@ -151,6 +165,15 @@ def index():
     edit_domain = request.args.get("edit")
     current_ip = resolver.records.get(edit_domain, "") if edit_domain else ""
 
+    # 🔍 Gera as infos de SSL uma única vez
+    ssl_status = {}
+    for domain, ip in resolver.records.items():
+        try:
+            info = resolver.get_ssl_info(domain)
+        except Exception as e:
+            info = {"ssl_enabled": False, "ssl_port": 443, "http_port": 80, "error": str(e)}
+        ssl_status[domain] = info
+
     return render_template(
         "index.html",
         user=session["user"],
@@ -158,7 +181,7 @@ def index():
         records=sorted(resolver.records.items()),
         edit_domain=edit_domain,
         current_ip=current_ip,
-        resolver=resolver
+        ssl_status=ssl_status  
     )
 
 # -----------------------------
@@ -233,12 +256,22 @@ def ssl_config(domain):
             ssl_port = int(request.form.get("ssl_port", 443))
             http_port = int(request.form.get("http_port", 80))
             
+            # Força a reconfiguração do Nginx
+            if ssl_enabled:
+                print(f"🔧 Reconfigurando Nginx para: {domain}")
+                resolver.configure_nginx_ssl(domain, ssl_port, http_port)
+            
             if resolver.update_ssl_config(domain, 
                                         ssl_enabled=ssl_enabled,
                                         ssl_port=ssl_port,
                                         http_port=http_port):
                 status = "habilitado" if ssl_enabled else "desabilitado"
                 flash(f"Configuração SSL para {domain} {status} com sucesso!", "success")
+                
+                # Recarrega Nginx
+                time.sleep(1)
+                resolver.reload_nginx()
+                
             else:
                 flash("Erro ao atualizar configuração SSL.", "danger")
         except Exception as e:
@@ -256,7 +289,7 @@ def ssl_config(domain):
 # Rota para editar DOMÍNIO (não apenas IP) - CORRIGIDA
 @app.route("/edit/<domain>")
 @login_required
-def edit_domain(domain):  # Mudei o nome da função para evitar conflito
+def edit_domain(domain):
     if domain in resolver.records:
         return redirect(url_for("index", edit=domain))
     flash("Domínio não encontrado.", "danger")
@@ -264,7 +297,7 @@ def edit_domain(domain):  # Mudei o nome da função para evitar conflito
 
 @app.route("/update/<old_domain>", methods=["POST"])
 @login_required
-def update_domain(old_domain):  # Mudei o nome da função
+def update_domain(old_domain):
     try:
         new_domain = sanitize_input(request.form.get("new_domain", "")).lower()
         new_ip = sanitize_input(request.form["new_ip"])
@@ -295,74 +328,41 @@ def update_domain(old_domain):  # Mudei o nome da função
                 stderr=subprocess.DEVNULL,
                 timeout=5
             )
-            if ping_result.returncode == 0:
-                # Se o domínio foi alterado, remove o antigo e adiciona o novo
-                if new_domain and new_domain != old_domain:
-                    old_ip = resolver.records[old_domain]
-                    ssl_info = resolver.get_ssl_info(old_domain)
-                    
-                    # Remove o domínio antigo
-                    del resolver.records[old_domain]
-                    
-                    # Adiciona com o novo domínio mantendo as configurações SSL
-                    resolver.add_host(
-                        new_domain, 
-                        new_ip, 
-                        ssl_info["ssl_enabled"],
-                        ssl_info["ssl_port"],
-                        ssl_info["http_port"]
-                    )
-                    flash(f"Atualizado (online): {old_domain} → {new_domain} → {new_ip}", "success")
-                else:
-                    # Apenas atualiza o IP
-                    resolver.records[old_domain] = new_ip
-                    resolver.save()
-                    flash(f"Atualizado (online): {old_domain} → {new_ip}", "success")
-            else:
-                if new_domain and new_domain != old_domain:
-                    old_ip = resolver.records[old_domain]
-                    ssl_info = resolver.get_ssl_info(old_domain)
-                    
-                    del resolver.records[old_domain]
-                    resolver.add_host(
-                        new_domain, 
-                        new_ip, 
-                        ssl_info["ssl_enabled"],
-                        ssl_info["ssl_port"],
-                        ssl_info["http_port"]
-                    )
-                    flash(f"⚠️ IP {new_ip} offline, mas registro atualizado: {old_domain} → {new_domain}", "warning")
-                else:
-                    resolver.records[old_domain] = new_ip
-                    resolver.save()
-                    flash(f"⚠️ IP {new_ip} offline, mas registro atualizado.", "warning")
-        except (subprocess.TimeoutExpired, Exception):
-            if new_domain and new_domain != old_domain:
-                old_ip = resolver.records[old_domain]
-                ssl_info = resolver.get_ssl_info(old_domain)
-                
-                del resolver.records[old_domain]
-                resolver.add_host(
-                    new_domain, 
-                    new_ip, 
-                    ssl_info["ssl_enabled"],
-                    ssl_info["ssl_port"],
-                    ssl_info["http_port"]
-                )
-                flash(f"⚠️ Não foi possível verificar o IP {new_ip}, mas registro atualizado: {old_domain} → {new_domain}", "warning")
-            else:
-                resolver.records[old_domain] = new_ip
-                resolver.save()
-                flash(f"⚠️ Não foi possível verificar o IP {new_ip}, mas registro atualizado.", "warning")
-                
+            is_online = ping_result.returncode == 0
+        except subprocess.TimeoutExpired:
+            is_online = False
+
+        ssl_info = resolver.get_ssl_info(old_domain)
+
+        if new_domain and new_domain != old_domain:
+            del resolver.records[old_domain]
+            resolver.add_host(
+                new_domain,
+                new_ip,
+                ssl_info["ssl_enabled"],
+                ssl_info["ssl_port"],
+                ssl_info["http_port"]
+            )
+            msg_prefix = f"{old_domain} → {new_domain} → {new_ip}"
+        else:
+            resolver.records[old_domain] = new_ip
+            resolver.save()
+            msg_prefix = f"{old_domain} → {new_ip}"
+
+        if is_online:
+            flash(f"✅ Atualizado (online): {msg_prefix}", "success")
+        else:
+            flash(f"⚠️ IP {new_ip} offline, mas registro atualizado: {msg_prefix}", "warning")
+
     except Exception as e:
         flash(f"Erro ao atualizar: {e}", "danger")
+        return redirect("/") 
     
-    return redirect("/")
+    return redirect("/") 
 
 @app.route("/delete/<domain>", methods=["POST"])
 @login_required
-def delete_domain(domain):  # Mudei o nome da função
+def delete_domain(domain):
     if domain in resolver.records:
         removed_ip = resolver.records.pop(domain)
         resolver.save()
@@ -510,6 +510,51 @@ def upload_ssl_certificate():
         flash("Certificado SSL atualizado!", "success")
     
     return redirect("/ssl-settings")
+
+@app.route("/debug-nginx")
+@login_required
+def debug_nginx():
+    """Rota de diagnóstico para Nginx"""
+    import glob
+    
+    debug_info = {
+        "nginx_status": "running" if subprocess.run(["pgrep", "nginx"], capture_output=True).returncode == 0 else "stopped",
+        "sites_available": glob.glob("/etc/nginx/sites-available/*.conf"),
+        "sites_enabled": glob.glob("/etc/nginx/sites-enabled/*.conf"),
+        "ssl_cert_exists": os.path.exists("/etc/nginx/ssl/cert.pem"),
+        "ssl_key_exists": os.path.exists("/etc/nginx/ssl/key.pem"),
+        "nginx_config_test": subprocess.run(["nginx", "-t"], capture_output=True, text=True).stdout
+    }
+    
+    return jsonify(debug_info)
+
+@app.route("/debug-templates")
+def debug_templates():
+    """Rota de diagnóstico para templates"""
+    debug_info = {
+        "template_folder": app.template_folder,
+        "static_folder": app.static_folder,
+        "templates_exist": os.path.exists(app.template_folder),
+        "static_exist": os.path.exists(app.static_folder),
+        "templates_list": os.listdir(app.template_folder) if os.path.exists(app.template_folder) else "NÃO EXISTE",
+        "static_list": os.listdir(app.static_folder) if os.path.exists(app.static_folder) else "NÃO EXISTE",
+        "current_dir": os.getcwd(),
+        "app_dir": os.path.dirname(os.path.abspath(__file__))
+    }
+    return jsonify(debug_info)
+
+@app.route("/debug-edit/<domain>")
+@login_required
+def debug_edit(domain):
+    """Rota de diagnóstico para edição"""
+    debug_info = {
+        "domain": domain,
+        "domain_in_records": domain in resolver.records,
+        "records_keys": list(resolver.records.keys()),
+        "current_url": request.url,
+        "edit_param": request.args.get("edit")
+    }
+    return jsonify(debug_info)    
 
 # -----------------------------
 if __name__ == "__main__":

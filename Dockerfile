@@ -7,22 +7,20 @@ RUN apt update && apt install -y \
 
 WORKDIR /app
 
-# Copiar arquivos
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY dns-server/ .
-COPY nginx/ /app/nginx/
+COPY dns-server/ /app/
+COPY nginx/templates /app/nginx/templates
 
-# Criar diretórios e dar permissões
-RUN mkdir -p /app/data /app/nginx/ssl /app/nginx/templates
-RUN chmod +x /app/nginx/start.sh 
+COPY nginx/start.sh .
+RUN chmod +x /app/start.sh
 
-# Configurar logs do Nginx
+RUN mkdir -p /app/data
+
 RUN ln -sf /dev/stdout /var/log/nginx/access.log \
     && ln -sf /dev/stderr /var/log/nginx/error.log
 
 EXPOSE 80 443 53/udp
 
-# Usar o script de inicialização
-CMD ["/app/nginx/start.sh"]  
+CMD ["/app/start.sh"]

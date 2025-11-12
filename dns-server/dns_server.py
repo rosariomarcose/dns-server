@@ -19,6 +19,25 @@ class CustomResolver:
         self.lock = threading.Lock()
         self.load_ssl_config()
         print(f"✅ DNS Server inicializado com {len(self.records)} registros")
+        
+        # Garantir que todos os domínios com SSL estão configurados no Nginx
+        self.ensure_all_ssl_configs()
+
+    def ensure_all_ssl_configs(self):
+        """Garante que todos os domínios com SSL estão configurados no Nginx"""
+        print("🔧 Verificando configurações SSL existentes...")
+        config = self.get_full_config()
+        
+        for domain, ssl_enabled in config.get("ssl_enabled", {}).items():
+            if ssl_enabled and domain in self.records:
+                ssl_port = config.get("ssl_ports", {}).get(domain, 443)
+                http_port = config.get("http_ports", {}).get(domain, 80)
+                
+                # Verificar se a configuração já existe
+                config_file = f"/etc/nginx/sites-available/{domain.replace('.', '_')}.conf"
+                if not os.path.exists(config_file):
+                    print(f"⚠️  Configuração faltando para {domain}, recriando...")
+                    self.configure_nginx_ssl(domain, ssl_port, http_port)
 
     def load_records(self):
         if not os.path.exists(DATA_FILE):
@@ -110,87 +129,180 @@ class CustomResolver:
         """Configura SSL no Nginx automaticamente"""
         with self.nginx_lock:
             try:
-                # 1. Gerar certificado auto-assinado se necessário
-                if self.ssl_config.get("auto_generate_ssl", True):
-                    self.generate_ssl_certificate(domain)
+                # 1. Gerar certificado INDIVIDUAL para o domínio
+                cert_file, key_file = self.generate_ssl_certificate(domain)
                 
-                # 2. Configurar Nginx
-                self.update_nginx_config(domain, ssl_port, http_port)
+                # 2. Configurar Nginx com certificados específicos
+                success = self.update_nginx_config(domain, ssl_port, http_port, cert_file, key_file)
                 
-                # 3. Recarregar Nginx
-                self.reload_nginx()
-                
-                print(f"🔒 SSL configurado para: {domain}")
+                if success:
+                    print(f"🔒 SSL configurado para: {domain}")
+                    print(f"   📄 Certificado: {cert_file}")
+                    print(f"   🔑 Chave: {key_file}")
+                else:
+                    print(f"❌ Falha ao configurar SSL para: {domain}")
                 
             except Exception as e:
                 print(f"❌ Erro ao configurar SSL para {domain}: {e}")
     
     def generate_ssl_certificate(self, domain):
-        """Gera certificado SSL auto-assinado"""
-        cert_dir = "/app/nginx/ssl"
+        """Gera certificado SSL INDIVIDUAL para cada domínio"""
+        cert_dir = "/etc/nginx/ssl"
         os.makedirs(cert_dir, exist_ok=True)
         
-        cert_file = f"{cert_dir}/cert.pem"
-        key_file = f"{cert_dir}/key.pem"
+        # Nomes de arquivo específicos do domínio
+        cert_file = f"{cert_dir}/{domain}.crt"
+        key_file = f"{cert_dir}/{domain}.key"
         
         # Só gera se não existir
         if not os.path.exists(cert_file):
             print(f"🔐 Gerando certificado SSL para {domain}...")
-            cmd = [
-                "openssl", "req", "-x509", "-nodes", "-days", "365",
-                "-newkey", "rsa:2048", "-keyout", key_file,
-                "-out", cert_file, "-subj", f"/CN={domain}"
-            ]
-            subprocess.run(cmd, check=True, capture_output=True)
-            
-            # Marca como auto-gerado
-            with open(f"{cert_dir}/auto_generated.txt", "w") as f:
-                f.write("Auto-generated for testing\n")
-            print("✅ Certificado SSL gerado")
-    
-    def update_nginx_config(self, domain, ssl_port, http_port):
-        """Atualiza configuração do Nginx para um domínio"""
-        template_dir = "/app/nginx/templates"
-        os.makedirs(template_dir, exist_ok=True)
+            try:
+                cmd = [
+                    "openssl", "req", "-x509", "-nodes", "-days", "365",
+                    "-newkey", "rsa:2048", "-keyout", key_file,
+                    "-out", cert_file, "-subj", f"/CN={domain}"
+                ]
+                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+                print(f"✅ Certificado individual gerado: {cert_file}")
+            except subprocess.CalledProcessError as e:
+                print(f"❌ Erro ao gerar certificado: {e.stderr}")
+                # Fallback para certificado padrão
+                cert_file = "/etc/nginx/ssl/cert.pem"
+                key_file = "/etc/nginx/ssl/key.pem"
+                print(f"🔄 Usando certificado padrão: {cert_file}")
         
-        # Template para servidor Nginx
-        server_template = """# Configuração automática para {domain}
-server {{
-    listen 80;
-    server_name {domain};
-    return 301 https://$server_name$request_uri;
-}}
+        return cert_file, key_file
+    
+    def update_nginx_config(self, domain, ssl_port=443, http_port=80, cert_file=None, key_file=None):
+        """Atualiza configuração do Nginx para um domínio com certificados específicos"""
+        print(f"🔧 Iniciando configuração Nginx para: {domain}")
+        
+        # ESTRUTURA PADRÃO: sites-available e sites-enabled
+        sites_available_dir = "/etc/nginx/sites-available"
+        sites_enabled_dir = "/etc/nginx/sites-enabled"
+        os.makedirs(sites_available_dir, exist_ok=True)
+        os.makedirs(sites_enabled_dir, exist_ok=True)
 
-server {{
-    listen 443 ssl;
-    server_name {domain};
-    
-    ssl_certificate /app/nginx/ssl/cert.pem;
-    ssl_certificate_key /app/nginx/ssl/key.pem;
-    
-    location / {{
-        proxy_pass http://{ip}:{http_port};
+        # Verificar se o domínio existe nos registros
+        if domain.lower() not in self.records:
+            print(f"❌ Domínio {domain} não encontrado nos registros DNS")
+            return False
+
+        ip = self.records[domain.lower()]
+        print(f"📡 Configurando {domain} → {ip}:{http_port} (SSL: {ssl_port})")
+
+        # Usar certificados específicos ou fallback
+        if not cert_file or not key_file:
+            cert_file = "/etc/nginx/ssl/cert.pem"
+            key_file = "/etc/nginx/ssl/key.pem"
+            print("⚠️  Usando certificado padrão (fallback)")
+
+        # Usar template padrão
+        template_file = "/app/nginx/templates/server_template.conf"
+        custom_template = None
+
+        if os.path.exists(template_file):
+            try:
+                with open(template_file, "r") as f:
+                    custom_template = f.read()
+                print(f"📄 Usando template: {template_file}")
+            except Exception as e:
+                print(f"⚠️ Erro ao ler template {template_file}: {e}")
+        
+        # Template fallback CORRIGIDO - usando placeholders simples
+        if not custom_template:
+            custom_template = """
+server {
+    listen 80;
+    server_name domain;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen ssl_port ssl;
+    server_name domain;
+    ssl_certificate cert_file;
+    ssl_certificate_key key_file;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    location / {
+        proxy_pass http://ip:http_port;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-    }}
-}}
+    }
+}
 """
+            print("📄 Usando template integrado")
         
-        config_content = server_template.format(
-            domain=domain,
-            ip=self.records[domain.lower()],
-            http_port=http_port
-        )
+        # APLICAÇÃO CORRIGIDA das variáveis - substituindo placeholders simples
+        config_content = custom_template.replace('domain', domain) \
+                                       .replace('ip', ip) \
+                                       .replace('http_port', str(http_port)) \
+                                       .replace('ssl_port', str(ssl_port)) \
+                                       .replace('cert_file', cert_file) \
+                                       .replace('key_file', key_file)
         
-        # Salva configuração específica do domínio
-        config_file = f"{template_dir}/{domain.replace('.', '_')}.conf"
-        with open(config_file, "w") as f:
-            f.write(config_content)
+        # ESTRUTURA PADRÃO: criar em sites-available e ativar em sites-enabled
+        config_file_available = f"{sites_available_dir}/{domain.replace('.', '_')}.conf"
+        config_file_enabled = f"{sites_enabled_dir}/{domain.replace('.', '_')}.conf"
         
-        print(f"📁 Configuração Nginx salva: {config_file}")
-    
+        # Salvar em sites-available
+        try:
+            with open(config_file_available, "w") as f:
+                f.write(config_content)
+            print(f"💾 Configuração salva em: {config_file_available}")
+        except Exception as e:
+            print(f"❌ Erro ao salvar configuração: {e}")
+            return False
+        
+        # Criar symlink em sites-enabled (estrutura padrão)
+        try:
+            if os.path.exists(config_file_enabled):
+                os.remove(config_file_enabled)
+                print(f"🗑️  Removido link anterior: {config_file_enabled}")
+            
+            os.symlink(config_file_available, config_file_enabled)
+            print(f"🔗 Link criado: {config_file_enabled} → {config_file_available}")
+        except Exception as e:
+            print(f"❌ Erro ao criar symlink: {e}")
+            return False
+        
+        print(f"✅ Site configurado: {domain}")
+        print(f"   - IP: {ip}")
+        print(f"   - HTTP Port: {http_port}")
+        print(f"   - HTTPS Port: {ssl_port}")
+        print(f"   - Certificado: {cert_file}")
+        print(f"   - Chave: {key_file}")
+        
+        return self.test_and_reload_nginx()
+
+    def test_and_reload_nginx(self):
+        """Testa e recarrega a configuração do Nginx"""
+        try:
+            # Testar configuração
+            result = subprocess.run(["nginx", "-t"], capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                print("✅ Configuração Nginx válida")
+                # Recarregar Nginx
+                reload_result = subprocess.run(["nginx", "-s", "reload"], capture_output=True, text=True, timeout=10)
+                if reload_result.returncode == 0:
+                    print("🔄 Nginx recarregado com sucesso")
+                    return True
+                else:
+                    print(f"⚠️ Erro ao recarregar Nginx: {reload_result.stderr}")
+                    return False
+            else:
+                print(f"❌ Erro na configuração Nginx: {result.stderr}")
+                return False
+        except subprocess.TimeoutExpired:
+            print("⏰ Timeout ao testar/recarregar Nginx")
+            return False
+        except Exception as e:
+            print(f"❌ Erro ao testar Nginx: {e}")
+            return False
+        
     def reload_nginx(self):
         """Recarrega configuração do Nginx"""
         try:
@@ -219,20 +331,27 @@ server {{
         """Atualiza configuração SSL de um host"""
         domain_lower = domain.lower()
         config = self.get_full_config()
-        
+
         if ssl_enabled is not None:
             config["ssl_enabled"][domain_lower] = ssl_enabled
-            # Se habilitando SSL, configura Nginx
+            # Se habilitando SSL, configura Nginx IMEDIATAMENTE
             if ssl_enabled:
+                print(f"🚀 Configurando SSL para: {domain}")
                 self.configure_nginx_ssl(domain, ssl_port or 443, http_port or 80)
-        
+
         if ssl_port is not None:
             config["ssl_ports"][domain_lower] = ssl_port
-        
+
         if http_port is not None:
             config["http_ports"][domain_lower] = http_port
-        
+
         self.save_full_config(config)
+
+        # Recarrega Nginx após salvar configurações
+        if ssl_enabled is not None:
+            time.sleep(2)  # Pequena pausa para garantir que tudo foi salvo
+            self.reload_nginx()
+
         return True
 
     def resolve(self, request, handler):
@@ -278,6 +397,15 @@ server {{
             reply.header.rcode = 3  # NXDOMAIN
             return reply
 
+    def ensure_nginx_config(self, domain):
+        """Garante que a configuração Nginx existe para o domínio"""
+        domain_lower = domain.lower()
+        if domain_lower in self.records:
+            ssl_info = self.get_ssl_info(domain)
+            if ssl_info["ssl_enabled"]:
+                print(f"🔧 Verificando configuração Nginx para: {domain}")
+                self.configure_nginx_ssl(domain, ssl_info["ssl_port"], ssl_info["http_port"])
+
 def start_dns_server(resolver):
     logger = DNSLogger(prefix=False)
     server = DNSServer(resolver, port=53, address="0.0.0.0", logger=logger)
@@ -322,56 +450,3 @@ if __name__ == "__main__":
     # Manter servidor rodando
     while True:
         time.sleep(1)
-
-
-# def update_nginx_config(self, domain, ssl_port=443, http_port=80):
-#     """Atualiza configuração do Nginx usando template avançado"""
-#     template_dir = "/app/nginx/templates"
-#     os.makedirs(template_dir, exist_ok=True)
-    
-#     # Verifica se existe template customizado
-#     template_file = "/app/nginx/templates/server_template.conf"
-#     if os.path.exists(template_file):
-#         # Usa template customizado
-#         with open(template_file, "r") as f:
-#             template_content = f.read()
-#     else:
-#         # Template básico (fallback)
-#         template_content = """# Configuração para {domain}
-# server {{
-#     listen 80;
-#     server_name {domain};
-#     return 301 https://$server_name$request_uri;
-# }}
-
-# server {{
-#     listen {ssl_port} ssl;
-#     server_name {domain};
-    
-#     ssl_certificate /app/nginx/ssl/cert.pem;
-#     ssl_certificate_key /app/nginx/ssl/key.pem;
-    
-#     location / {{
-#         proxy_pass http://{ip}:{http_port};
-#         proxy_set_header Host $host;
-#         proxy_set_header X-Real-IP $remote_addr;
-#         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-#         proxy_set_header X-Forwarded-Proto $scheme;
-#     }}
-# }}
-# """
-    
-#     # Substitui variáveis no template
-#     config_content = template_content.format(
-#         domain=domain,
-#         ip=self.records[domain.lower()],
-#         http_port=http_port,
-#         ssl_port=ssl_port
-#     )
-    
-#     # Salva configuração específica do domínio
-#     config_file = f"{template_dir}/{domain.replace('.', '_')}.conf"
-#     with open(config_file, "w") as f:
-#         f.write(config_content)
-    
-#     print(f"📁 Configuração Nginx salva: {config_file}")        

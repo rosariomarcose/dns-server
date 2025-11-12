@@ -81,7 +81,7 @@
               <td><strong>{{ domain }}</strong></td>
               <td><code class="code">{{ ip }}</code></td>
               <td>
-                {% set ssl_info = resolver.get_ssl_info(domain) %}
+                {% set ssl_info = ssl_status.get(domain, {'ssl_enabled': False}) %}
                 {% if ssl_info.ssl_enabled %}
                   <span style="color: #10b981; font-weight: bold;">🔒 HTTPS</span>
                 {% else %}

@@ -5,11 +5,7 @@
     "publicacao_erp.waybe.com.br": "192.168.5.216",
     "publicacao_api.waybe.com.br": "192.168.5.216",
     "homolog_api.waybe.com.br": "192.168.5.20",
-    "homolog_erp.waybe.com.br": "192.168.5.20",
-    "erp_gabriel.waybe.com.br": "192.168.5.175",
-    "api_gabriel.waybe.com.br": "192.168.5.175",
-    "erpwaybe_homolog.waybe.com.br": "192.168.5.47",
-    "public.sifat.com.br": "192.168.5.248"
+    "homolog_erp.waybe.com.br": "192.168.5.20"
   },
   "ssl_enabled": {
     "dev_api.waybe.com.br": false,

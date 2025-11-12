@@ -106,7 +106,8 @@ def login_required(f):
 
 def validate_domain(domain):
     """Valida formato do domínio"""
-    pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?)*$'
+    # Permite letras, números, hífens, underscores e pontos
+    pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?)*$'
     return bool(re.match(pattern, domain)) and len(domain) <= 253
 
 def validate_ip(ip):
@@ -174,15 +175,41 @@ def index():
             info = {"ssl_enabled": False, "ssl_port": 443, "http_port": 80, "error": str(e)}
         ssl_status[domain] = info
 
-    return render_template(
+    # Ordenação inteligente: agrupa por domínio base e depois por IP
+    def sort_records(records):
+        grouped = {}
+        for domain, ip in records:
+            # Extrair base do domínio (antes do primeiro '_' ou mantendo se não houver)
+            base = domain.split('_')[0] if '_' in domain else domain
+            if base not in grouped:
+                grouped[base] = []
+            grouped[base].append((domain, ip))
+
+        # Ordenar dentro de cada grupo por domínio completo
+        sorted_groups = []
+        for base in sorted(grouped.keys()):
+            sorted_groups.extend(sorted(grouped[base]))
+
+        print(f"🔄 Ordenação aplicada: {len(sorted_groups)} registros agrupados por domínio")
+        return sorted_groups
+
+    response = render_template(
         "index.html",
         user=session["user"],
         is_admin=session.get("is_admin", False),
-        records=sorted(resolver.records.items()),
+        records=sort_records(resolver.records.items()),
         edit_domain=edit_domain,
         current_ip=current_ip,
-        ssl_status=ssl_status  
+        ssl_status=ssl_status
     )
+
+    # Forçar headers para evitar cache
+    from flask import make_response
+    response = make_response(response)
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 # -----------------------------
 # Rotas de CRUD DNS - CORRIGIDAS
@@ -190,55 +217,81 @@ def index():
 @app.route("/add", methods=["POST"])
 @login_required
 def add():
+    print("🔄 Iniciando adição de domínio")
     try:
-        domain = sanitize_input(request.form["domain"]).lower()
-        ip = sanitize_input(request.form["ip"])
+        # Verificar se os campos existem
+        domain_raw = request.form.get("domain", "").strip()
+        ip_raw = request.form.get("ip", "").strip()
+
+        print(f"📝 Dados RAW recebidos - domain: '{domain_raw}', ip: '{ip_raw}'")
+
+        domain = sanitize_input(domain_raw).lower()
+        ip = sanitize_input(ip_raw)
         ssl_enabled = request.form.get("ssl_enabled") == "on"
         ssl_port = int(request.form.get("ssl_port", 443))
         http_port = int(request.form.get("http_port", 80))
-        
+
+        print(f"📝 Dados processados - domain: '{domain}', ip: '{ip}', ssl: {ssl_enabled}")
+
         if not domain or not ip:
+            print("❌ Domínio e IP são obrigatórios")
             flash("Domínio e IP são obrigatórios.", "danger")
             return redirect("/")
-        
+
         if not validate_domain(domain):
+            print(f"❌ Domínio inválido: {domain}")
             flash("Domínio inválido. Use apenas letras, números e hífens.", "danger")
             return redirect("/")
-        
+
         if not validate_ip(ip):
+            print(f"❌ IP inválido: {ip}")
             flash("IP inválido. Use apenas IPs privados (192.168.x.x, 10.x.x.x, 172.16-31.x.x).", "danger")
             return redirect("/")
-        
+
         # Verifica se o domínio já existe
         if domain in resolver.records:
+            print(f"❌ Domínio já existe: {domain}")
             flash(f"Domínio {domain} já existe.", "danger")
             return redirect("/")
-        
+
         # Verifica se o IP está online
         try:
             ping_result = subprocess.run(
                 ["ping", "-c", "1", "-W", "2", ip],
-                stdout=subprocess.DEVNULL, 
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=5
             )
             if ping_result.returncode == 0:
+                print(f"📡 Ping para {ip}: ONLINE")
                 resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
                 status = " (SSL)" if ssl_enabled else ""
                 flash(f"Adicionado (online{status}): {domain} → {ip}", "success")
+                print(f"✅ Adicionado com sucesso: {domain} → {ip}")
             else:
+                print(f"📡 Ping para {ip}: OFFLINE")
                 resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
                 status = " (SSL)" if ssl_enabled else ""
                 flash(f"⚠️ IP {ip} offline, mas registro adicionado{status}.", "warning")
-        except (subprocess.TimeoutExpired, Exception):
+        except (subprocess.TimeoutExpired, Exception) as e:
+            print(f"⏰ Timeout no ping para {ip}: {e}")
             resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
             status = " (SSL)" if ssl_enabled else ""
             flash(f"⚠️ Não foi possível verificar o IP {ip}, mas registro adicionado{status}.", "warning")
-        
+
+        print("🚀 Redirecionando após adição bem-sucedida")
+        response = redirect("/")
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+
     except Exception as e:
+        print(f"❌ Erro geral na adição: {e}")
+        import traceback
+        print(f"📋 Stack trace: {traceback.format_exc()}")
         flash(f"Erro ao adicionar registro: {e}", "danger")
-    
-    return redirect("/")
+        return redirect("/")
 
 # Adicione esta rota para configuração SSL
 @app.route("/ssl/<domain>", methods=["GET", "POST"])
@@ -289,7 +342,7 @@ def ssl_config(domain):
 # Rota para editar DOMÍNIO (não apenas IP) - CORRIGIDA
 @app.route("/edit/<domain>")
 @login_required
-def edit_domain(domain):
+def edit(domain):
     if domain in resolver.records:
         return redirect(url_for("index", edit=domain))
     flash("Domínio não encontrado.", "danger")
@@ -297,79 +350,153 @@ def edit_domain(domain):
 
 @app.route("/update/<old_domain>", methods=["POST"])
 @login_required
-def update_domain(old_domain):
+def update(old_domain):
+    print(f"🔄 Iniciando atualização de domínio: {old_domain}")
     try:
-        new_domain = sanitize_input(request.form.get("new_domain", "")).lower()
-        new_ip = sanitize_input(request.form["new_ip"])
-        
+        # Verificar se os campos existem no formulário
+        new_domain = request.form.get("new_domain", "").strip()
+        new_ip = request.form.get("new_ip", "").strip()
+
+        print(f"📝 Dados RAW recebidos - new_domain: '{new_domain}', new_ip: '{new_ip}'")
+
+        # Sanitizar os inputs
+        new_domain = sanitize_input(new_domain).lower() if new_domain else ""
+        new_ip = sanitize_input(new_ip)
+
+        print(f"📝 Dados sanitizados - Domínio: '{new_domain}', IP: '{new_ip}'")
+
         if not new_ip:
+            print("❌ IP é obrigatório")
             flash("IP é obrigatório.", "danger")
             return redirect("/")
-        
+
         if not validate_ip(new_ip):
+            print(f"❌ IP inválido: {new_ip}")
             flash("IP inválido. Use apenas IPs privados.", "danger")
             return redirect("/")
-        
+
         if old_domain not in resolver.records:
+            print(f"❌ Domínio não encontrado: {old_domain}")
             flash("Domínio não encontrado.", "danger")
             return redirect("/")
-        
+
         # Se o domínio foi alterado, verifica se o novo domínio já existe
         if new_domain and new_domain != old_domain:
             if new_domain in resolver.records:
+                print(f"❌ Domínio já existe: {new_domain}")
                 flash(f"Domínio {new_domain} já existe.", "danger")
                 return redirect("/")
-        
+
         # Verifica se o IP está online
         try:
             ping_result = subprocess.run(
                 ["ping", "-c", "1", "-W", "2", new_ip],
-                stdout=subprocess.DEVNULL, 
+                stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=5
             )
             is_online = ping_result.returncode == 0
+            print(f"📡 Ping para {new_ip}: {'ONLINE' if is_online else 'OFFLINE'}")
         except subprocess.TimeoutExpired:
             is_online = False
+            print(f"⏰ Timeout no ping para {new_ip}")
 
         ssl_info = resolver.get_ssl_info(old_domain)
+        print(f"🔒 SSL info para {old_domain}: {ssl_info}")
 
         if new_domain and new_domain != old_domain:
-            del resolver.records[old_domain]
-            resolver.add_host(
-                new_domain,
-                new_ip,
-                ssl_info["ssl_enabled"],
-                ssl_info["ssl_port"],
-                ssl_info["http_port"]
-            )
-            msg_prefix = f"{old_domain} → {new_domain} → {new_ip}"
+            print(f"🔄 Alterando domínio: {old_domain} → {new_domain}")
+            # Remover domínio antigo e adicionar novo - TUDO dentro do lock
+            try:
+                with resolver.lock:
+                    del resolver.records[old_domain]
+                    print(f"✅ Domínio antigo removido: {old_domain}")
+
+                    # Atualizar configuração completa
+                    config = resolver.get_full_config()
+                    config["hosts"][new_domain.lower()] = new_ip
+                    config["ssl_enabled"][new_domain.lower()] = ssl_info["ssl_enabled"]
+                    config["ssl_ports"][new_domain.lower()] = ssl_info["ssl_port"]
+                    config["http_ports"][new_domain.lower()] = ssl_info["http_port"]
+
+                    # Remover configurações antigas
+                    if old_domain.lower() in config["hosts"]:
+                        del config["hosts"][old_domain.lower()]
+                    if old_domain.lower() in config["ssl_enabled"]:
+                        del config["ssl_enabled"][old_domain.lower()]
+                    if old_domain.lower() in config["ssl_ports"]:
+                        del config["ssl_ports"][old_domain.lower()]
+                    if old_domain.lower() in config["http_ports"]:
+                        del config["http_ports"][old_domain.lower()]
+
+                    resolver.save_full_config(config)
+                    print(f"✅ Novo domínio adicionado: {new_domain} → {new_ip}")
+
+                msg_prefix = f"{old_domain} → {new_domain} → {new_ip}"
+            except Exception as e:
+                print(f"❌ Erro ao alterar domínio: {e}")
+                flash(f"Erro ao alterar domínio: {e}", "danger")
+                return redirect("/")
         else:
-            resolver.records[old_domain] = new_ip
-            resolver.save()
-            msg_prefix = f"{old_domain} → {new_ip}"
+            # Apenas atualizar IP - dentro do lock para consistência
+            print(f"🔄 Atualizando IP: {old_domain} → {new_ip}")
+            try:
+                with resolver.lock:
+                    resolver.records[old_domain] = new_ip
+                    resolver.save()
+                print(f"✅ IP atualizado com sucesso")
+                msg_prefix = f"{old_domain} → {new_ip}"
+            except Exception as e:
+                print(f"❌ Erro ao atualizar IP: {e}")
+                flash(f"Erro ao atualizar IP: {e}", "danger")
+                return redirect("/")
 
         if is_online:
             flash(f"✅ Atualizado (online): {msg_prefix}", "success")
         else:
             flash(f"⚠️ IP {new_ip} offline, mas registro atualizado: {msg_prefix}", "warning")
 
+        print(f"✅ Atualização concluída com sucesso: {msg_prefix}")
+
+        # Forçar resposta imediata com headers de no-cache
+        response = redirect("/")
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        print("🚀 Redirecionando para página inicial...")
+        return response
+
     except Exception as e:
+        print(f"❌ Erro geral na atualização: {e}")
+        import traceback
+        print(f"📋 Stack trace: {traceback.format_exc()}")
         flash(f"Erro ao atualizar: {e}", "danger")
-        return redirect("/") 
-    
-    return redirect("/") 
+        return redirect("/")
 
 @app.route("/delete/<domain>", methods=["POST"])
 @login_required
 def delete_domain(domain):
-    if domain in resolver.records:
-        removed_ip = resolver.records.pop(domain)
-        resolver.save()
-        flash(f"Removido: {domain} → {removed_ip}", "danger")
-    else:
-        flash("Domínio não encontrado.", "danger")
-    return redirect("/")
+    print(f"🗑️ Iniciando remoção de domínio: {domain}")
+    try:
+        if domain in resolver.records:
+            removed_ip = resolver.records.pop(domain)
+            resolver.save()
+            flash(f"Removido: {domain} → {removed_ip}", "danger")
+            print(f"✅ Removido com sucesso: {domain} → {removed_ip}")
+        else:
+            flash("Domínio não encontrado.", "danger")
+            print(f"❌ Domínio não encontrado: {domain}")
+
+        print("🚀 Redirecionando após remoção")
+        response = redirect("/")
+        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+        return response
+    except Exception as e:
+        print(f"❌ Erro na remoção: {e}")
+        flash(f"Erro ao remover domínio: {e}", "danger")
+        return redirect("/")
 
 # -----------------------------
 # Painel administrativo

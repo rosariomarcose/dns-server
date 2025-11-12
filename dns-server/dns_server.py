@@ -281,21 +281,29 @@ server {
     def test_and_reload_nginx(self):
         """Testa e recarrega a configuração do Nginx"""
         try:
-            # Testar configuração
+            # Testar configuração primeiro
             result = subprocess.run(["nginx", "-t"], capture_output=True, text=True, timeout=10)
-            if result.returncode == 0:
-                print("✅ Configuração Nginx válida")
-                # Recarregar Nginx
-                reload_result = subprocess.run(["nginx", "-s", "reload"], capture_output=True, text=True, timeout=10)
-                if reload_result.returncode == 0:
-                    print("🔄 Nginx recarregado com sucesso")
-                    return True
-                else:
-                    print(f"⚠️ Erro ao recarregar Nginx: {reload_result.stderr}")
-                    return False
-            else:
+            if result.returncode != 0:
                 print(f"❌ Erro na configuração Nginx: {result.stderr}")
                 return False
+
+            print("✅ Configuração Nginx válida")
+
+            # Verificar se Nginx está rodando antes de tentar recarregar
+            check_result = subprocess.run(["pgrep", "nginx"], capture_output=True, timeout=5)
+            if check_result.returncode != 0:
+                print("⚠️ Nginx não está rodando, pulando reload")
+                return True
+
+            # Recarregar Nginx
+            reload_result = subprocess.run(["nginx", "-s", "reload"], capture_output=True, text=True, timeout=15)
+            if reload_result.returncode == 0:
+                print("🔄 Nginx recarregado com sucesso")
+                return True
+            else:
+                print(f"⚠️ Erro ao recarregar Nginx: {reload_result.stderr}")
+                return False
+
         except subprocess.TimeoutExpired:
             print("⏰ Timeout ao testar/recarregar Nginx")
             return False
@@ -307,12 +315,19 @@ server {
         """Recarrega configuração do Nginx"""
         try:
             # Verifica se nginx está rodando
-            result = subprocess.run(["pgrep", "nginx"], capture_output=True)
+            result = subprocess.run(["pgrep", "nginx"], capture_output=True, timeout=5)
             if result.returncode == 0:
-                subprocess.run(["nginx", "-s", "reload"], check=True)
-                print("🔄 Nginx recarregado")
+                # Testa configuração antes de recarregar
+                test_result = subprocess.run(["nginx", "-t"], capture_output=True, text=True, timeout=10)
+                if test_result.returncode == 0:
+                    subprocess.run(["nginx", "-s", "reload"], check=True, timeout=15)
+                    print("🔄 Nginx recarregado")
+                else:
+                    print(f"⚠️ Configuração Nginx inválida, pulando reload: {test_result.stderr}")
             else:
                 print("⚠️  Nginx não está rodando")
+        except subprocess.TimeoutExpired:
+            print("⏰ Timeout ao recarregar Nginx")
         except Exception as e:
             print(f"❌ Erro ao recarregar Nginx: {e}")
 
@@ -347,9 +362,9 @@ server {
 
         self.save_full_config(config)
 
-        # Recarrega Nginx após salvar configurações
+        # Recarrega Nginx após salvar configurações apenas se SSL foi alterado
         if ssl_enabled is not None:
-            time.sleep(2)  # Pequena pausa para garantir que tudo foi salvo
+            time.sleep(1)  # Pequena pausa para garantir que tudo foi salvo
             self.reload_nginx()
 
         return True

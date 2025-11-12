@@ -29,7 +29,7 @@
         <div style="flex: 1; min-width: 200px;">
           <label for="domain" style="display: block; margin-bottom: 5px; font-weight: 500;">Domínio:</label>
           <input type="text" id="domain" name="domain" placeholder="ex: app.local" required
-                 pattern="^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$">
+                 pattern="^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?)*$">
         </div>
         <div style="align-self: flex-end;">
           <button type="submit" class="btn-primary">➕ Adicionar</button>
@@ -77,9 +77,9 @@
           </thead>
           <tbody>
             {% for domain, ip in records %}
-            <tr>
-              <td><strong>{{ domain }}</strong></td>
-              <td><code class="code">{{ ip }}</code></td>
+            <tr data-domain="{{ domain }}" data-ip="{{ ip }}">
+              <td><strong class="domain-link" onclick="sortByDomain('{{ domain.split('_')[0] }}')" style="cursor:pointer;">{{ domain }}</strong></td>
+              <td><code class="code ip-link" data-ip="{{ ip }}" onclick="sortByIP('{{ ip }}')" style="cursor:pointer;">{{ ip }}</code></td>
               <td>
                 {% set ssl_info = ssl_status.get(domain, {'ssl_enabled': False}) %}
                 {% if ssl_info.ssl_enabled %}
@@ -98,7 +98,7 @@
                   </button>
                 </a>
                 
-                <a href="{{ url_for('edit_domain', domain=domain) }}">
+                <a href="{{ url_for('edit', domain=domain) }}">
                   <button class="btn-warning btn-sm" type="button" onclick="event.stopPropagation();">✏️ Editar</button>
                 </a>
                 <form method="post" action="/delete/{{ domain }}" style="display:inline;"
@@ -113,17 +113,17 @@
               <td colspan="4">
                 <div class="card" style="border: 2px solid #f59e0b; margin-top:10px;">
                   <h4>✏️ Editando: {{ edit_domain }}</h4>
-                  <form method="post" action="{{ url_for('update_domain', old_domain=edit_domain) }}">
+                  <form method="post" action="{{ url_for('update', old_domain=edit_domain) }}">
                     <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
                       <div style="flex: 1; min-width: 200px;">
                         <label for="new_domain" style="display: block; margin-bottom: 5px; font-weight: 500;">Domínio:</label>
-                        <input type="text" id="new_domain" name="new_domain" value="{{ edit_domain }}" required 
-                               placeholder="Domínio"
-                               pattern="^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$">
+                        <input type="text" id="new_domain" name="new_domain" value="{{ edit_domain }}"
+                               placeholder="Domínio (deixe vazio para manter o mesmo)"
+                               pattern="^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?)*$">
                       </div>
                       <div style="flex: 1; min-width: 200px;">
                         <label for="new_ip" style="display: block; margin-bottom: 5px; font-weight: 500;">IP interno:</label>
-                        <input type="text" id="new_ip" name="new_ip" value="{{ current_ip }}" required 
+                        <input type="text" id="new_ip" name="new_ip" value="{{ current_ip }}" required
                                placeholder="Novo IP interno"
                                pattern="^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})$">
                       </div>
@@ -299,6 +299,85 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
+// Ordenar registros por domínio base (agrupar domínios similares)
+function sortByDomain(baseDomain) {
+    const tbody = document.querySelector('tbody');
+    const rows = Array.from(tbody.children).filter(row => !row.querySelector('.card[style*="border: 2px solid #f59e0b"]'));
+
+    // Separar linhas em grupos: domínios com a mesma base primeiro, depois outros
+    const matchingDomains = [];
+    const others = [];
+
+    rows.forEach(row => {
+        const domain = row.getAttribute('data-domain');
+        if (domain) {
+            const domainBase = domain.split('_')[0];
+            if (domainBase === baseDomain) {
+                matchingDomains.push(row);
+            } else {
+                others.push(row);
+            }
+        }
+    });
+
+    // Reordenar removendo todas as linhas e adicionando novamente na ordem correta
+    rows.forEach(row => tbody.removeChild(row));
+
+    // Adicionar primeiro domínios similares
+    matchingDomains.forEach(row => tbody.appendChild(row));
+
+    // Depois os outros
+    others.forEach(row => tbody.appendChild(row));
+
+    // Scroll para o topo da tabela
+    document.querySelector('.table-responsive').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Toast de confirmação
+    showToast(`Agrupado domínios similares a ${baseDomain}`, 'success');
+}
+
+// Ordenar registros por IP similar (agrupar IPs iguais ou similares)
+function sortByIP(selectedIP) {
+    const tbody = document.querySelector('tbody');
+    const rows = Array.from(tbody.children).filter(row => !row.querySelector('.card[style*="border: 2px solid #f59e0b"]'));
+
+    // Separar linhas em grupos: IPs iguais primeiro, depois similares, depois outros
+    const exactMatches = [];
+    const similarMatches = [];
+    const others = [];
+
+    rows.forEach(row => {
+        const ip = row.getAttribute('data-ip');
+        if (ip) {
+            if (ip === selectedIP) {
+                exactMatches.push(row);
+            } else if (ip.split('.')[0] === selectedIP.split('.')[0] && ip.split('.')[1] === selectedIP.split('.')[1]) {
+                // Mesmo subrede (192.168.5.x)
+                similarMatches.push(row);
+            } else {
+                others.push(row);
+            }
+        }
+    });
+
+    // Reordenar removendo todas as linhas e adicionando novamente na ordem correta
+    rows.forEach(row => tbody.removeChild(row));
+
+    // Adicionar primeiro IPs exatos
+    exactMatches.forEach(row => tbody.appendChild(row));
+
+    // Depois IPs similares
+    similarMatches.forEach(row => tbody.appendChild(row));
+
+    // Depois os outros
+    others.forEach(row => tbody.appendChild(row));
+
+    // Scroll para o topo da tabela
+    document.querySelector('.table-responsive').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Toast de confirmação
+    showToast(`Agrupado registros com IPs similares a ${selectedIP}`, 'success');
+}
 // Re-inicializar copia após possíveis atualizações dinâmicas do DOM
 setTimeout(setupCopyButtons, 100);
 </script>

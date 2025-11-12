@@ -92,7 +92,7 @@ def login_required(f):
 
 def validate_domain(domain):
     """Valida formato do domínio"""
-    pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$'
+    pattern = r'^[a-zA-Z0-9]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9_-]{0,61}[a-zA-Z0-9])?)*$'
     return bool(re.match(pattern, domain)) and len(domain) <= 253
 
 def validate_ip(ip):
@@ -108,8 +108,8 @@ def validate_ip(ip):
         return False
 
 def sanitize_input(text):
-    """Remove caracteres potencialmente perigosos"""
-    return re.sub(r'[^\w\.\-\@]', '', text.strip())
+    """Remove caracteres potencialmente perigosos, mantendo hífens e underscores"""
+    return re.sub(r'[^\w\.\-_]', '', text.strip())
 
 # -----------------------------
 # Rotas de autenticação
@@ -475,6 +475,41 @@ def internal_error(error):
     app.logger.error(f'Server Error: {error}')
     flash("Erro interno no servidor. Verifique os registros DNS ou tente novamente.", "danger")
     return redirect(url_for("index"))
+
+@app.route("/ssl-settings", methods=["GET", "POST"])
+@login_required
+def ssl_settings():
+    """Configurações globais de SSL"""
+    if request.method == "POST":
+        auto_generate = request.form.get("auto_generate_ssl") == "on"
+        resolver.ssl_config["auto_generate_ssl"] = auto_generate
+        resolver.save_ssl_config()
+        flash("Configurações SSL atualizadas!", "success")
+    
+    return render_template("ssl_settings.html", 
+                         ssl_config=resolver.ssl_config,
+                         user=session["user"])
+
+@app.route("/ssl-certificate", methods=["POST"])
+@login_required
+def upload_ssl_certificate():
+    """Upload de certificado SSL customizado"""
+    if request.files.get("cert_file") and request.files.get("key_file"):
+        cert_file = request.files["cert_file"]
+        key_file = request.files["key_file"]
+        
+        cert_file.save("/app/nginx/ssl/cert.pem")
+        key_file.save("/app/nginx/ssl/key.pem")
+        
+        # Remove marca de auto-geração
+        auto_file = "/app/nginx/ssl/auto_generated.txt"
+        if os.path.exists(auto_file):
+            os.remove(auto_file)
+        
+        resolver.reload_nginx()
+        flash("Certificado SSL atualizado!", "success")
+    
+    return redirect("/ssl-settings")
 
 # -----------------------------
 if __name__ == "__main__":

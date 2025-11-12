@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container">
+<div class="container ssl-config-container">
   <div class="topbar">
     <h2>🔒 Configuração SSL</h2>
     <div class="user-menu">
@@ -17,47 +17,87 @@
     </div>
   </div>
 
-  <div class="card">
-    <h3>Configuração SSL para: <code>{{ domain }}</code></h3>
+  <!-- Informações do Domínio -->
+  <div class="card domain-info">
+    <h3>Configuração SSL para</h3>
+    <p><strong>Domínio:</strong> <code>{{ domain }}</code></p>
     <p><strong>IP:</strong> <code>{{ ip }}</code></p>
-    
+  </div>
+
+  <div class="card">
     <form method="post">
-      <div class="form-group">
+      <!-- Checkbox SSL -->
+      <div class="checkbox-container">
         <label class="checkbox-label">
           <input type="checkbox" name="ssl_enabled" {{ 'checked' if ssl_info.ssl_enabled }}>
-          <span class="checkmark"></span>
-          Habilitar SSL/HTTPS para este domínio
+          <span class="checkbox-custom"></span>
+          <span class="checkbox-text">
+            <span class="checkbox-title">Habilitar SSL/HTTPS</span>
+            <span class="checkbox-description">
+              Quando habilitado, o sistema configurará automaticamente o Nginx para servir este domínio via HTTPS
+            </span>
+          </span>
         </label>
-        <small class="text-muted">
-          Quando habilitado, o sistema indicará que este domínio deve ser acessado via HTTPS
-        </small>
       </div>
 
-      <div class="form-row">
-        <div class="form-group">
-          <label for="http_port">Porta HTTP:</label>
-          <input type="number" id="http_port" name="http_port" value="{{ ssl_info.http_port }}" min="1" max="65535">
+      <!-- Configuração de Portas -->
+      <div class="ports-config">
+        <div class="ports-header">
+          <h4>🌐 Configuração de Portas</h4>
         </div>
-        
-        <div class="form-group">
-          <label for="ssl_port">Porta HTTPS:</label>
-          <input type="number" id="ssl_port" name="ssl_port" value="{{ ssl_info.ssl_port }}" min="1" max="65535">
+        <div class="ports-grid">
+          <div class="port-input-group">
+            <label for="http_port">Porta HTTP</label>
+            <div class="port-input-wrapper">
+              <input type="number" id="http_port" name="http_port" 
+                     value="{{ ssl_info.http_port }}" min="1" max="65535" 
+                     placeholder="80">
+            </div>
+            <small class="text-muted">Porta do serviço HTTP interno</small>
+          </div>
+          
+          <div class="port-input-group">
+            <label for="ssl_port">Porta HTTPS</label>
+            <div class="port-input-wrapper https">
+              <input type="number" id="ssl_port" name="ssl_port" 
+                     value="{{ ssl_info.ssl_port }}" min="1" max="65535" 
+                     placeholder="443">
+            </div>
+            <small class="text-muted">Porta do serviço HTTPS interno</small>
+          </div>
         </div>
       </div>
 
+      <!-- Ações -->
       <div class="form-actions">
-        <button type="submit" class="btn-primary">💾 Salvar Configuração</button>
-        <a href="/" class="btn-secondary">← Voltar</a>
+        <button type="submit" class="btn-primary">
+          💾 Salvar Configurações
+        </button>
+        <a href="/" class="btn-secondary">← Voltar ao Painel</a>
       </div>
     </form>
   </div>
 
-  <div class="card">
-    <h4>ℹ️ Como funciona</h4>
-    <ul>
-      <li><strong>SSL Habilitado:</strong> O DNS retornará informações indicando que o domínio suporta HTTPS</li>
-      <li><strong>SSL Desabilitado:</strong> O domínio será tratado como HTTP normal</li>
-      <li><strong>Portas:</strong> Configure as portas específicas usadas pelo seu serviço</li>
+  <!-- Informações -->
+  <div class="card ssl-info-card">
+    <h4>📋 Como funciona o SSL</h4>
+    <ul class="info-list">
+      <li>
+        <strong>🔒 SSL Habilitado:</strong> 
+        O Nginx redireciona automaticamente HTTP → HTTPS e serve via SSL
+      </li>
+      <li>
+        <strong>🔓 SSL Desabilitado:</strong> 
+        O domínio será servido apenas via HTTP
+      </li>
+      <li>
+        <strong>🌐 Portas:</strong> 
+        Configure as portas específicas usadas pelo seu serviço backend
+      </li>
+      <li>
+        <strong>⚡ Automático:</strong> 
+        As configurações do Nginx são atualizadas automaticamente
+      </li>
     </ul>
   </div>
 </div>
@@ -72,6 +112,7 @@ function toggleMenu() {
   }
 }
 
+// Fechar menu ao clicar fora
 document.addEventListener('click', (e) => {
   const menu = document.getElementById('menuDropdown');
   const icon = document.querySelector('.user-icon');
@@ -79,6 +120,28 @@ document.addEventListener('click', (e) => {
   if (menu && icon && !icon.contains(e.target) && !menu.contains(e.target)) {
     menu.style.display = 'none';
   }
+});
+
+// Feedback visual para o checkbox
+document.addEventListener('DOMContentLoaded', function() {
+  const checkbox = document.querySelector('input[name="ssl_enabled"]');
+  const portsConfig = document.querySelector('.ports-config');
+  
+  function togglePortsVisibility() {
+    if (checkbox.checked) {
+      portsConfig.style.opacity = '1';
+      portsConfig.style.pointerEvents = 'all';
+    } else {
+      portsConfig.style.opacity = '0.6';
+      portsConfig.style.pointerEvents = 'none';
+    }
+  }
+  
+  // Aplicar estado inicial
+  togglePortsVisibility();
+  
+  // Adicionar listener
+  checkbox.addEventListener('change', togglePortsVisibility);
 });
 </script>
 {% endblock %}

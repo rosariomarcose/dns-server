@@ -4,6 +4,7 @@ services:
     container_name: dns-server
     volumes:
       - ./dns-server/data:/app/data:rw
+      - ./nginx:/app/nginx:rw
     restart: always
     privileged: true
     cap_add:

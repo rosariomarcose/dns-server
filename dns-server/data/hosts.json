@@ -6,7 +6,8 @@
     "publicacao_api.waybe.com.br": "192.168.5.216",
     "homolog_api.waybe.com.br": "192.168.5.20",
     "homolog_erp.waybe.com.br": "192.168.5.20",
-    "dns-resolver.waybe.com.br": "192.168.5.248"
+    "dns-resolver.waybe.com.br": "192.168.5.248",
+    "biometria.sifat.com.br": "192.168.5.215"
   },
   "ssl_enabled": {
     "dev_api.waybe.com.br": false,
@@ -15,7 +16,8 @@
     "publicacao_api.waybe.com.br": false,
     "homolog_api.waybe.com.br": false,
     "homolog_erp.waybe.com.br": false,
-    "dns-resolver.waybe.com.br": true
+    "dns-resolver.waybe.com.br": true,
+    "biometria.sifat.com.br": true
   },
   "ssl_ports": {
     "dev_api.waybe.com.br": 443,
@@ -24,7 +26,8 @@
     "publicacao_api.waybe.com.br": 443,
     "homolog_api.waybe.com.br": 443,
     "homolog_erp.waybe.com.br": 443,
-    "dns-resolver.waybe.com.br": 443
+    "dns-resolver.waybe.com.br": 443,
+    "biometria.sifat.com.br": 443
   },
   "http_ports": {
     "dev_api.waybe.com.br": 80,
@@ -33,6 +36,7 @@
     "publicacao_api.waybe.com.br": 80,
     "homolog_api.waybe.com.br": 80,
     "homolog_erp.waybe.com.br": 80,
-    "dns-resolver.waybe.com.br": 8000
+    "dns-resolver.waybe.com.br": 8000,
+    "biometria.sifat.com.br": 4445
   }
 }

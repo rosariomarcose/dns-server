@@ -90,6 +90,12 @@ def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f, indent=2)
 
+# Atualizar senha do admin para sft6033
+users = load_users()
+admin_pass = bcrypt.hashpw("sft6033".encode(), bcrypt.gensalt()).decode()
+users["admin"]["password"] = admin_pass
+save_users(users)
+
 def login_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -258,12 +264,17 @@ def add():
 
         print(f"📝 DEBUG: Dados finais - domain: '{domain}', ip: '{ip}', ssl: {ssl_enabled}")
 
-        # Verifica se o domínio já existe (verificação rápida)
+        # Se o domínio já existe, permite sobrescrever (corrige o problema de timeout)
         print(f"🔍 DEBUG: Verificando se domínio existe: {domain in resolver.records}")
-        if domain in resolver.records:
-            print(f"❌ DEBUG: Domínio já existe: {domain}")
-            flash(f"Domínio {domain} já existe.", "danger")
-            return redirect("/")
+        domain_exists = domain in resolver.records
+        if domain_exists:
+            print(f"⚠️ DEBUG: Domínio já existe, sobrescrevendo: {domain}")
+            # Remove configurações antigas antes de sobrescrever
+            config = resolver.get_full_config()
+            for key in ['ssl_enabled', 'ssl_ports', 'http_ports']:
+                if key in config and domain in config[key]:
+                    del config[key][domain]
+            resolver.save_full_config(config)
 
         print(f"🔍 DEBUG: Registros antes: {len(resolver.records)}")
 
@@ -303,7 +314,8 @@ def add():
         # RESPOSTA IMEDIATA (não espera nada)
         print("🔍 DEBUG: Preparando resposta...")
         status = " (SSL)" if ssl_enabled else ""
-        flash(f"Adicionado{status}: {domain} → {ip}", "success")
+        action = "Atualizado" if domain_exists else "Adicionado"
+        flash(f"{action}{status}: {domain} → {ip}", "success")
 
         print("🚀 DEBUG: Criando redirect...")
         try:

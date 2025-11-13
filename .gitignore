@@ -1,0 +1,6 @@
+nginx/etc/nginx/ssl/*
+nginx/etc/nginx/sites-available/*
+nginx/etc/nginx/ssl/sites-enabled/*
+nginx/etc/nginx/logs/*
+
+dns-server/data/*

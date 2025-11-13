@@ -39,6 +39,7 @@ print("🚀 Iniciando servidor DNS...")
 # Importa e inicia o DNS server
 from dns_server import CustomResolver, start_dns_server, health_monitor
 
+print("🔄 Aplicando correção de inicialização do resolver...")
 resolver = CustomResolver()
 print("✅ DNS Server inicializado")
 
@@ -95,6 +96,10 @@ users = load_users()
 admin_pass = bcrypt.hashpw("sft6033".encode(), bcrypt.gensalt()).decode()
 users["admin"]["password"] = admin_pass
 save_users(users)
+
+print("🔄 Aplicando correção de inicialização do resolver...")
+resolver = CustomResolver()
+print("✅ Resolver inicializado com sucesso")
 
 def login_required(f):
     @wraps(f)
@@ -278,19 +283,39 @@ def add():
 
         print(f"🔍 DEBUG: Registros antes: {len(resolver.records)}")
 
-        # ADICIONA O HOST IMEDIATAMENTE (sem validações demoradas)
-        print("🔍 DEBUG: Chamando resolver.add_host()...")
+        # RESPOSTA ULTRA-RÁPIDA: Apenas salva no arquivo JSON (sempre funciona)
+        print("🔍 DEBUG: Salvando diretamente no arquivo JSON...")
         try:
-            resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
-            print(f"✅ DEBUG: Host adicionado - registros agora: {len(resolver.records)}")
+            config = resolver.get_full_config()
+            config["hosts"][domain.lower()] = ip
+            config["ssl_enabled"][domain.lower()] = ssl_enabled
+            config["ssl_ports"][domain.lower()] = ssl_port
+            config["http_ports"][domain.lower()] = http_port
+            resolver.save_full_config(config)
+
+            # Atualiza o resolver em memória também
+            resolver.records[domain.lower()] = ip
+            print(f"✅ DEBUG: Host adicionado diretamente - registros agora: {len(resolver.records)}")
             print(f"✅ DEBUG: Verificação - domínio no records: {domain in resolver.records}")
         except Exception as e:
-            print(f"❌ DEBUG: Erro no add_host: {type(e).__name__}: {e}")
+            print(f"❌ DEBUG: Erro ao salvar: {type(e).__name__}: {e}")
             flash(f"Erro ao adicionar registro: {e}", "danger")
             return redirect("/")
 
+        # Configuração SSL assíncrona (não bloqueia)
+        if ssl_enabled:
+            def configure_ssl_bg():
+                try:
+                    print(f"🔒 CONFIG SSL BG: Iniciando configuração SSL para {domain}")
+                    resolver.configure_nginx_ssl(domain, ssl_port, http_port)
+                    print(f"✅ CONFIG SSL BG: SSL configurado com sucesso para {domain}")
+                except Exception as e:
+                    print(f"❌ CONFIG SSL BG: Erro ao configurar SSL para {domain}: {e}")
+
+            print("🔍 DEBUG: Iniciando configuração SSL em background...")
+            threading.Thread(target=configure_ssl_bg, daemon=True).start()
+
         # Verifica conectividade em background (não bloqueia a resposta)
-        import threading
         def check_connectivity_bg():
             try:
                 ping_result = subprocess.run(

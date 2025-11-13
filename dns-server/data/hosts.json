@@ -7,7 +7,7 @@
     "homolog_api.waybe.com.br": "192.168.5.20",
     "homolog_erp.waybe.com.br": "192.168.5.20",
     "dns-resolver.waybe.com.br": "192.168.5.248",
-    "biometria.sifat.com.br": "192.168.5.215"
+    "teste.rapido.com.br": "192.168.5.216"
   },
   "ssl_enabled": {
     "dev_api.waybe.com.br": false,
@@ -17,7 +17,7 @@
     "homolog_api.waybe.com.br": false,
     "homolog_erp.waybe.com.br": false,
     "dns-resolver.waybe.com.br": true,
-    "biometria.sifat.com.br": true
+    "teste.rapido.com.br": true
   },
   "ssl_ports": {
     "dev_api.waybe.com.br": 443,
@@ -27,7 +27,7 @@
     "homolog_api.waybe.com.br": 443,
     "homolog_erp.waybe.com.br": 443,
     "dns-resolver.waybe.com.br": 443,
-    "biometria.sifat.com.br": 443
+    "teste.rapido.com.br": 8443
   },
   "http_ports": {
     "dev_api.waybe.com.br": 80,
@@ -37,6 +37,6 @@
     "homolog_api.waybe.com.br": 80,
     "homolog_erp.waybe.com.br": 80,
     "dns-resolver.waybe.com.br": 8000,
-    "biometria.sifat.com.br": 4445
+    "teste.rapido.com.br": 8080
   }
 }

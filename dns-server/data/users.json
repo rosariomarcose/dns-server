@@ -10,5 +10,9 @@
   "junior": {
     "password": "$2b$12$XREp3kAxeJn2ZVS2J2PWRuxpO/prj0qRa.UTrCcIRvYiibvfEwSZy",
     "is_admin": false
+  },
+  "felipe": {
+    "password": "$2b$12$t5djy1kn5S6TO9zne23ap.MQyciW9FRF4nLJKLJ8qeWAiY1q/khgO",
+    "is_admin": false
   }
 }

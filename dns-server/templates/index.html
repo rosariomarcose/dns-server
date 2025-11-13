@@ -17,6 +17,18 @@
     </div>
   </div>
 
+  <!-- Download Certificado CA -->
+  <div class="card">
+    <h3>🔐 Certificado SSL (Opcional)</h3>
+    <p class="text-muted">Para acessar HTTPS sem avisos de segurança, baixe e instale o certificado CA:</p>
+    <a href="/ca-cert" class="btn-primary" download="dns-resolver-ca.crt" style="text-decoration: none;">
+      📥 Baixar Certificado CA
+    </a>
+    <p class="text-muted" style="margin-top: 10px; font-size: 12px;">
+      Instale este certificado nas Autoridades de Certificação Confiáveis do seu sistema
+    </p>
+  </div>
+
   <!-- Form adicionar DNS COM SSL -->
   <div class="card">
     <form method="post" action="/add" id="add-form">
@@ -242,31 +254,27 @@ document.addEventListener('click', (e) => {
   }
 });
 
-// Validação client-side
+// Validação client-side (REMOVIDA - usar apenas server-side)
 const addForm = document.getElementById('add-form');
 if (addForm) {
   addForm.addEventListener('submit', function(e) {
-    const ip = document.getElementById('ip')?.value;
-    const domain = document.getElementById('domain')?.value;
-    
-    if (ip && !isValidIP(ip)) {
-      e.preventDefault();
-      showToast('IP inválido. Use formato: 192.168.x.x, 10.x.x.x ou 172.16-31.x.x', 'danger');
-      return;
-    }
-    
-    if (domain && !isValidDomain(domain)) {
-      e.preventDefault();
-      showToast('Domínio inválido. Use apenas letras, números e hífens.', 'danger');
-      return;
+    // Removida validação client-side - deixar apenas server-side
+    // Isso permite que o formulário seja enviado mesmo com "erros" de validação
+    // O servidor fará a validação final e retornará mensagens de erro apropriadas
+
+    // Mostrar indicador de carregamento
+    const submitBtn = addForm.querySelector('button[type="submit"]');
+    if (submitBtn) {
+      submitBtn.textContent = '⏳ Processando...';
+      submitBtn.disabled = true;
     }
   });
 }
 
-// Funções de validação
+// Funções de validação (mantidas apenas para referência, mas não usadas na validação)
 function isValidIP(ip) {
   const pattern = /^(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})$/;
-  
+
   if (pattern.test(ip)) {
     const parts = ip.split('.');
     for (let part of parts) {
@@ -281,7 +289,7 @@ function isValidIP(ip) {
 }
 
 function isValidDomain(domain) {
-  const pattern = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  const pattern = /^[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9_.-]{0,61}[a-zA-Z0-9])?)*$/;
   return pattern.test(domain) && domain.length <= 253;
 }
 

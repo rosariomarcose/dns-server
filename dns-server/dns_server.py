@@ -99,6 +99,7 @@ class CustomResolver:
         with self.lock:
             with open(DATA_FILE, "w", encoding="utf-8") as f:
                 json.dump(config, f, indent=2, ensure_ascii=False)
+            print(f"💾 Configuração salva em: {DATA_FILE}")
 
     def save(self):
         """Mantém compatibilidade com código existente"""
@@ -107,23 +108,24 @@ class CustomResolver:
         self.save_full_config(config)
 
     def add_host(self, domain, ip, ssl_enabled=False, ssl_port=443, http_port=80):
-        """Adiciona host e configura SSL se necessário"""
+        """Adiciona host sem configurar Nginx (apenas DNS)"""
+        print(f"🔄 Iniciando adição de host: {domain} → {ip} (SSL: {ssl_enabled})")
         with self.lock:
             self.records[domain.lower()] = ip
-            
+
             config = self.get_full_config()
             config["hosts"][domain.lower()] = ip
             config["ssl_enabled"][domain.lower()] = ssl_enabled
             config["ssl_ports"][domain.lower()] = ssl_port
             config["http_ports"][domain.lower()] = http_port
-            
+
             self.save_full_config(config)
-            
-            # Se SSL está habilitado, configura Nginx automaticamente
-            if ssl_enabled:
-                self.configure_nginx_ssl(domain, ssl_port, http_port)
-            
+
             print(f"✅ Host adicionado: {domain} → {ip} (SSL: {ssl_enabled})")
+            print(f"📁 Configuração salva no arquivo: {DATA_FILE}")
+
+            # Configuração Nginx só acontece quando SSL é habilitado via interface
+            # Isso torna a adição instantânea sem delays desnecessários
     
     def configure_nginx_ssl(self, domain, ssl_port=443, http_port=80):
         """Configura SSL no Nginx automaticamente"""
@@ -149,29 +151,66 @@ class CustomResolver:
         """Gera certificado SSL INDIVIDUAL para cada domínio"""
         cert_dir = "/etc/nginx/ssl"
         os.makedirs(cert_dir, exist_ok=True)
-        
+
         # Nomes de arquivo específicos do domínio
         cert_file = f"{cert_dir}/{domain}.crt"
         key_file = f"{cert_dir}/{domain}.key"
-        
+
         # Só gera se não existir
         if not os.path.exists(cert_file):
             print(f"🔐 Gerando certificado SSL para {domain}...")
             try:
-                cmd = [
-                    "openssl", "req", "-x509", "-nodes", "-days", "365",
-                    "-newkey", "rsa:2048", "-keyout", key_file,
-                    "-out", cert_file, "-subj", f"/CN={domain}"
-                ]
-                result = subprocess.run(cmd, check=True, capture_output=True, text=True)
-                print(f"✅ Certificado individual gerado: {cert_file}")
+                # Criar CA própria se não existir
+                ca_cert = f"{cert_dir}/ca.crt"
+                ca_key = f"{cert_dir}/ca.key"
+
+                if not os.path.exists(ca_cert):
+                    print("🏛️  Criando Autoridade Certificadora local...")
+                    # Gerar chave privada da CA
+                    subprocess.run([
+                        "openssl", "genrsa", "-out", ca_key, "2048"
+                    ], check=True, capture_output=True, timeout=30)
+
+                    # Gerar certificado da CA
+                    subprocess.run([
+                        "openssl", "req", "-x509", "-new", "-nodes", "-key", ca_key,
+                        "-sha256", "-days", "3650", "-out", ca_cert,
+                        "-subj", "/CN=DNS-Resolver-CA/O=Local Network/C=BR"
+                    ], check=True, capture_output=True, timeout=30)
+                    print("✅ Autoridade Certificadora criada")
+
+                # Gerar chave privada do domínio
+                subprocess.run([
+                    "openssl", "genrsa", "-out", key_file, "2048"
+                ], check=True, capture_output=True, timeout=30)
+
+                # Criar CSR (Certificate Signing Request)
+                csr_file = f"{cert_dir}/{domain}.csr"
+                subprocess.run([
+                    "openssl", "req", "-new", "-key", key_file, "-out", csr_file,
+                    "-subj", f"/CN={domain}/O=Local Network/C=BR"
+                ], check=True, capture_output=True, timeout=30)
+
+                # Assinar certificado com a CA
+                subprocess.run([
+                    "openssl", "x509", "-req", "-in", csr_file, "-CA", ca_cert,
+                    "-CAkey", ca_key, "-CAcreateserial", "-out", cert_file,
+                    "-days", "365", "-sha256"
+                ], check=True, capture_output=True, timeout=30)
+
+                # Limpar arquivos temporários
+                if os.path.exists(csr_file):
+                    os.remove(csr_file)
+
+                print(f"✅ Certificado assinado gerado: {cert_file}")
+
             except subprocess.CalledProcessError as e:
                 print(f"❌ Erro ao gerar certificado: {e.stderr}")
                 # Fallback para certificado padrão
                 cert_file = "/etc/nginx/ssl/cert.pem"
                 key_file = "/etc/nginx/ssl/key.pem"
                 print(f"🔄 Usando certificado padrão: {cert_file}")
-        
+
         return cert_file, key_file
     
     def update_nginx_config(self, domain, ssl_port=443, http_port=80, cert_file=None, key_file=None):
@@ -282,7 +321,7 @@ server {
         """Testa e recarrega a configuração do Nginx"""
         try:
             # Testar configuração primeiro
-            result = subprocess.run(["nginx", "-t"], capture_output=True, text=True, timeout=10)
+            result = subprocess.run(["nginx", "-t"], capture_output=True, text=True, timeout=30)
             if result.returncode != 0:
                 print(f"❌ Erro na configuração Nginx: {result.stderr}")
                 return False
@@ -296,7 +335,7 @@ server {
                 return True
 
             # Recarregar Nginx
-            reload_result = subprocess.run(["nginx", "-s", "reload"], capture_output=True, text=True, timeout=15)
+            reload_result = subprocess.run(["nginx", "-s", "reload"], capture_output=True, text=True, timeout=60)
             if reload_result.returncode == 0:
                 print("🔄 Nginx recarregado com sucesso")
                 return True
@@ -318,9 +357,9 @@ server {
             result = subprocess.run(["pgrep", "nginx"], capture_output=True, timeout=5)
             if result.returncode == 0:
                 # Testa configuração antes de recarregar
-                test_result = subprocess.run(["nginx", "-t"], capture_output=True, text=True, timeout=10)
+                test_result = subprocess.run(["nginx", "-t"], capture_output=True, text=True, timeout=30)
                 if test_result.returncode == 0:
-                    subprocess.run(["nginx", "-s", "reload"], check=True, timeout=15)
+                    subprocess.run(["nginx", "-s", "reload"], check=True, timeout=60)
                     print("🔄 Nginx recarregado")
                 else:
                     print(f"⚠️ Configuração Nginx inválida, pulando reload: {test_result.stderr}")
@@ -374,6 +413,10 @@ server {
         qtype = request.q.qtype
         reply = request.reply()
 
+        # Debug: mostrar queries para domínios locais
+        if any(local_domain in qname for local_domain in ['dns-server', 'homolog', 'dev', 'publicacao']):
+            print(f"[DEBUG] Query LOCAL recebida: {qname} (type: {qtype})")
+
         # Resposta para consultas TXT com informações SSL
         if qtype == 16:  # TXT record
             ssl_info = self.get_ssl_info(qname)
@@ -383,22 +426,26 @@ server {
                 print(f"[SSL-INFO] {qname} → {txt_data}")
                 return reply
 
-        with self.lock:
-            if qname in self.records:
-                ip = self.records[qname]
-                reply.add_answer(RR(qname, qtype, rdata=A(ip), ttl=60))
-                
-                # Adiciona informação SSL como TXT record adicional
-                ssl_info = self.get_ssl_info(qname)
-                if ssl_info["ssl_enabled"]:
-                    txt_data = f"ssl_enabled=true;port_https={ssl_info['ssl_port']};port_http={ssl_info['http_port']}"
-                    reply.add_answer(RR(qname, 16, rdata=TXT(txt_data), ttl=60))
-                
-                status = "🔒" if ssl_info["ssl_enabled"] else "🔓"
-                print(f"[LOCAL] {status} {qname} → {ip}")
-                return reply
+        # Verificar se é registro local - SEM LOCK para evitar problemas de concorrência
+        if qname in self.records:
+            ip = self.records[qname]
+            reply.add_answer(RR(qname, qtype, rdata=A(ip), ttl=60))
 
-        # Consulta externa (proxy recursivo)
+            # Adiciona informação SSL como TXT record adicional
+            ssl_info = self.get_ssl_info(qname)
+            if ssl_info["ssl_enabled"]:
+                txt_data = f"ssl_enabled=true;port_https={ssl_info['ssl_port']};port_http={ssl_info['http_port']}"
+                reply.add_answer(RR(qname, 16, rdata=TXT(txt_data), ttl=60))
+
+            status = "🔒" if ssl_info["ssl_enabled"] else "🔓"
+            print(f"[LOCAL] {status} {qname} → {ip}")
+            return reply
+
+        # Debug para queries não locais
+        if any(local_domain in qname for local_domain in ['dns-server', 'homolog', 'dev', 'publicacao']):
+            print(f"[DEBUG] {qname} não encontrado localmente, indo para upstream")
+
+        # Consulta externa (proxy recursivo) - APENAS se não for local
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.settimeout(3)

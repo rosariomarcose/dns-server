@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, flash, url_for, session, jsonify
+from flask import Flask, render_template, request, redirect, flash, url_for, session, jsonify, send_file
 import threading, subprocess, json, os, time, bcrypt, re, ipaddress
 from functools import wraps
 import sys
@@ -217,81 +217,128 @@ def index():
 @app.route("/add", methods=["POST"])
 @login_required
 def add():
-    print("🔄 Iniciando adição de domínio")
+    print("🔄 DEBUG: Iniciando rota /add")
     try:
+        print("🔍 DEBUG: Recebendo dados do formulário...")
         # Verificar se os campos existem
         domain_raw = request.form.get("domain", "").strip()
         ip_raw = request.form.get("ip", "").strip()
 
-        print(f"📝 Dados RAW recebidos - domain: '{domain_raw}', ip: '{ip_raw}'")
+        print(f"🔍 DEBUG: domain_raw='{domain_raw}' (len={len(domain_raw)})")
+        print(f"🔍 DEBUG: ip_raw='{ip_raw}' (len={len(ip_raw)})")
 
+        # Validações básicas primeiro (rápidas)
+        if not domain_raw or not ip_raw:
+            print("❌ DEBUG: Campos obrigatórios vazios")
+            flash("Domínio e IP são obrigatórios.", "danger")
+            return redirect("/")
+
+        print("🔍 DEBUG: Sanitizando dados...")
+        # Sanitizar e validar domínio
         domain = sanitize_input(domain_raw).lower()
+        print(f"🔍 DEBUG: domain_sanitized='{domain}' (len={len(domain)})")
+
+        if not domain or not validate_domain(domain):
+            print(f"❌ DEBUG: validate_domain('{domain}') = {validate_domain(domain)}")
+            flash("Domínio inválido. Use apenas letras, números, hífens, underscores e pontos.", "danger")
+            return redirect("/")
+
+        # Sanitizar e validar IP
         ip = sanitize_input(ip_raw)
+        print(f"🔍 DEBUG: ip_sanitized='{ip}' (len={len(ip)})")
+
+        if not ip or not validate_ip(ip):
+            print(f"❌ DEBUG: validate_ip('{ip}') = {validate_ip(ip)}")
+            flash("IP inválido. Use apenas IPs privados (192.168.x.x, 10.x.x.x, 172.16-31.x.x).", "danger")
+            return redirect("/")
+
         ssl_enabled = request.form.get("ssl_enabled") == "on"
         ssl_port = int(request.form.get("ssl_port", 443))
         http_port = int(request.form.get("http_port", 80))
 
-        print(f"📝 Dados processados - domain: '{domain}', ip: '{ip}', ssl: {ssl_enabled}")
+        print(f"📝 DEBUG: Dados finais - domain: '{domain}', ip: '{ip}', ssl: {ssl_enabled}")
 
-        if not domain or not ip:
-            print("❌ Domínio e IP são obrigatórios")
-            flash("Domínio e IP são obrigatórios.", "danger")
-            return redirect("/")
-
-        if not validate_domain(domain):
-            print(f"❌ Domínio inválido: {domain}")
-            flash("Domínio inválido. Use apenas letras, números e hífens.", "danger")
-            return redirect("/")
-
-        if not validate_ip(ip):
-            print(f"❌ IP inválido: {ip}")
-            flash("IP inválido. Use apenas IPs privados (192.168.x.x, 10.x.x.x, 172.16-31.x.x).", "danger")
-            return redirect("/")
-
-        # Verifica se o domínio já existe
+        # Verifica se o domínio já existe (verificação rápida)
+        print(f"🔍 DEBUG: Verificando se domínio existe: {domain in resolver.records}")
         if domain in resolver.records:
-            print(f"❌ Domínio já existe: {domain}")
+            print(f"❌ DEBUG: Domínio já existe: {domain}")
             flash(f"Domínio {domain} já existe.", "danger")
             return redirect("/")
 
-        # Verifica se o IP está online
-        try:
-            ping_result = subprocess.run(
-                ["ping", "-c", "1", "-W", "2", ip],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=5
-            )
-            if ping_result.returncode == 0:
-                print(f"📡 Ping para {ip}: ONLINE")
-                resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
-                status = " (SSL)" if ssl_enabled else ""
-                flash(f"Adicionado (online{status}): {domain} → {ip}", "success")
-                print(f"✅ Adicionado com sucesso: {domain} → {ip}")
-            else:
-                print(f"📡 Ping para {ip}: OFFLINE")
-                resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
-                status = " (SSL)" if ssl_enabled else ""
-                flash(f"⚠️ IP {ip} offline, mas registro adicionado{status}.", "warning")
-        except (subprocess.TimeoutExpired, Exception) as e:
-            print(f"⏰ Timeout no ping para {ip}: {e}")
-            resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
-            status = " (SSL)" if ssl_enabled else ""
-            flash(f"⚠️ Não foi possível verificar o IP {ip}, mas registro adicionado{status}.", "warning")
+        print(f"🔍 DEBUG: Registros antes: {len(resolver.records)}")
 
-        print("🚀 Redirecionando após adição bem-sucedida")
-        response = redirect("/")
-        response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-        response.headers['Pragma'] = 'no-cache'
-        response.headers['Expires'] = '0'
-        return response
+        # ADICIONA O HOST IMEDIATAMENTE (sem validações demoradas)
+        print("🔍 DEBUG: Chamando resolver.add_host()...")
+        try:
+            resolver.add_host(domain, ip, ssl_enabled, ssl_port, http_port)
+            print(f"✅ DEBUG: Host adicionado - registros agora: {len(resolver.records)}")
+            print(f"✅ DEBUG: Verificação - domínio no records: {domain in resolver.records}")
+        except Exception as e:
+            print(f"❌ DEBUG: Erro no add_host: {type(e).__name__}: {e}")
+            flash(f"Erro ao adicionar registro: {e}", "danger")
+            return redirect("/")
+
+        # Verifica conectividade em background (não bloqueia a resposta)
+        import threading
+        def check_connectivity_bg():
+            try:
+                ping_result = subprocess.run(
+                    ["ping", "-c", "1", "-W", "2", ip],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5
+                )
+                if ping_result.returncode == 0:
+                    status = " (SSL)" if ssl_enabled else ""
+                    print(f"📡 DEBUG BG: Ping para {ip}: ONLINE{status}")
+                else:
+                    print(f"📡 DEBUG BG: Ping para {ip}: OFFLINE")
+            except Exception as e:
+                print(f"📡 DEBUG BG: Ping falhou para {ip}: {e}")
+
+        # Inicia verificação em background
+        print("🔍 DEBUG: Iniciando thread de ping em background...")
+        threading.Thread(target=check_connectivity_bg, daemon=True).start()
+
+        # RESPOSTA IMEDIATA (não espera nada)
+        print("🔍 DEBUG: Preparando resposta...")
+        status = " (SSL)" if ssl_enabled else ""
+        flash(f"Adicionado{status}: {domain} → {ip}", "success")
+
+        print("🚀 DEBUG: Criando redirect...")
+        try:
+            response = redirect("/")
+            print("🚀 DEBUG: Redirect criado com sucesso")
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            print("🚀 DEBUG: Headers adicionados, retornando resposta...")
+            return response
+        except Exception as e:
+            print(f"🚀 DEBUG: ERRO no redirect: {type(e).__name__}: {e}")
+            import traceback
+            print(f"📋 DEBUG TRACE REDIRECT:\n{traceback.format_exc()}")
+            raise
 
     except Exception as e:
-        print(f"❌ Erro geral na adição: {e}")
+        print(f"❌ DEBUG: ERRO CRÍTICO GERAL: {type(e).__name__}: {e}")
         import traceback
-        print(f"📋 Stack trace: {traceback.format_exc()}")
+        print(f"📋 DEBUG TRACE COMPLETO:\n{traceback.format_exc()}")
+        flash(f"Erro crítico: {e}", "danger")
+        try:
+            return redirect("/")
+        except:
+            return "Erro interno", 500
+
+    except Exception as e:
+        print(f"❌ DEBUG: ERRO CRÍTICO: {type(e).__name__}: {e}")
+        import traceback
+        print(f"📋 DEBUG TRACE COMPLETO:\n{traceback.format_exc()}")
         flash(f"Erro ao adicionar registro: {e}", "danger")
-        return redirect("/")
+        try:
+            return redirect("/")
+        except:
+            return "Erro interno", 500
 
 # Adicione esta rota para configuração SSL
 @app.route("/ssl/<domain>", methods=["GET", "POST"])
@@ -443,7 +490,12 @@ def update(old_domain):
             try:
                 with resolver.lock:
                     resolver.records[old_domain] = new_ip
-                    resolver.save()
+
+                    # Atualizar apenas o IP no config completo
+                    config = resolver.get_full_config()
+                    config["hosts"][old_domain.lower()] = new_ip
+                    resolver.save_full_config(config)
+
                 print(f"✅ IP atualizado com sucesso")
                 msg_prefix = f"{old_domain} → {new_ip}"
             except Exception as e:
@@ -481,6 +533,27 @@ def delete_domain(domain):
         if domain in resolver.records:
             removed_ip = resolver.records.pop(domain)
             resolver.save()
+
+            # Limpar configurações órfãs (SSL, ports) para este domínio
+            config = resolver.get_full_config()
+            domain_keys_to_clean = [
+                'ssl_enabled', 'ssl_ports', 'http_ports'
+            ]
+
+            for key in domain_keys_to_clean:
+                if key in config and domain in config[key]:
+                    del config[key][domain]
+                    print(f"🧹 Removido {key} para: {domain}")
+
+            resolver.save_full_config(config)
+
+            # Remover configuração Nginx se existir
+            config_file = f"/etc/nginx/sites-enabled/{domain.replace('.', '_')}.conf"
+            if os.path.exists(config_file):
+                os.remove(config_file)
+                print(f"🗑️ Removido configuração Nginx: {config_file}")
+                resolver.reload_nginx()
+
             flash(f"Removido: {domain} → {removed_ip}", "danger")
             print(f"✅ Removido com sucesso: {domain} → {removed_ip}")
         else:
@@ -681,13 +754,22 @@ def debug_edit(domain):
         "current_url": request.url,
         "edit_param": request.args.get("edit")
     }
-    return jsonify(debug_info)    
+    return jsonify(debug_info)
+
+@app.route('/ca-cert')
+def download_ca_cert():
+    """Endpoint para baixar o certificado da CA"""
+    ca_cert_path = "/etc/nginx/ssl/ca.crt"
+    if os.path.exists(ca_cert_path):
+        return send_file(ca_cert_path, as_attachment=True, download_name='dns-resolver-ca.crt')
+    else:
+        return "Certificado CA não encontrado", 404
 
 # -----------------------------
 if __name__ == "__main__":
     print("""
     ⚡ DNS SERVER LOCAL (APENAS REDE INTERNA)
-    📊 Painel: http://localhost:8000
+    📊 Painel: http://192.168.5.248:8000
     🌐 DNS:    127.0.0.1:53
     """)
     app.run(host="0.0.0.0", port=8000, debug=True)

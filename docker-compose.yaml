@@ -1,6 +1,7 @@
 services:
   dns-server:
-    image: sifatsistemas/servidor-dns:main
+    # image: sifatsistemas/servidor-dns:main
+    build: .
     container_name: dns-server
     volumes:
       - ./dns-server/data:/app/data:rw

@@ -47,6 +47,14 @@ http {
 EOF
 echo "✅ nginx.conf configurado"
 
+# Configurar DNS para usar DNS local + externo (persistente)
+echo "🌐 Configurando DNS híbrido..."
+cat > /etc/resolv.conf << 'EOF'
+nameserver 127.0.0.1
+nameserver 8.8.8.8
+EOF
+echo "✅ DNS configurado: Local (127.0.0.1) + Google (8.8.8.8)"
+
 # Configuração base em conf.d/
 echo "📁 Configurando base em conf.d/"
 cat > /etc/nginx/conf.d/00-base.conf << 'EOF'

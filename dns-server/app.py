@@ -11,7 +11,7 @@ sys.path.append('/app')
 template_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 
-app = Flask(__name__, 
+app = Flask(__name__,
             template_folder=template_dir,
             static_folder=static_dir)
 app.secret_key = os.urandom(24)
@@ -127,7 +127,7 @@ def validate_ip(ip):
         ip_obj = ipaddress.ip_address(ip)
         # Aceita IPs privados:
         # - 192.168.0.0/16
-        # - 10.0.0.0/8  
+        # - 10.0.0.0/8
         # - 172.16.0.0/12
         return ip_obj.is_private
     except ValueError:
@@ -153,7 +153,7 @@ def login():
                 session["user"] = username
                 session["is_admin"] = users[username].get("is_admin", False)
                 session["last_activity"] = time.time()
-                flash(f"Bem-vindo, {username}!", "success")
+                # Remover mensagem de boas-vindas fixa, manter apenas popups temporários
                 return redirect(url_for("index"))
 
         flash("Usuário ou senha incorretos.", "danger")
@@ -384,44 +384,44 @@ def ssl_config(domain):
     if domain not in resolver.records:
         flash("Domínio não encontrado.", "danger")
         return redirect("/")
-    
+
     ssl_info = resolver.get_ssl_info(domain)
-    
+
     if request.method == "POST":
         try:
             ssl_enabled = request.form.get("ssl_enabled") == "on"
             ssl_port = int(request.form.get("ssl_port", 443))
             http_port = int(request.form.get("http_port", 80))
-            
+
             # Força a reconfiguração do Nginx
             if ssl_enabled:
                 print(f"🔧 Reconfigurando Nginx para: {domain}")
                 resolver.configure_nginx_ssl(domain, ssl_port, http_port)
-            
-            if resolver.update_ssl_config(domain, 
+
+            if resolver.update_ssl_config(domain,
                                         ssl_enabled=ssl_enabled,
                                         ssl_port=ssl_port,
                                         http_port=http_port):
                 status = "habilitado" if ssl_enabled else "desabilitado"
                 flash(f"Configuração SSL para {domain} {status} com sucesso!", "success")
-                
+
                 # Recarrega Nginx
                 time.sleep(1)
                 resolver.reload_nginx()
-                
+
             else:
                 flash("Erro ao atualizar configuração SSL.", "danger")
         except Exception as e:
             flash(f"Erro ao atualizar SSL: {e}", "danger")
-        
+
         return redirect("/")
-    
+
     return render_template("ssl_config.html",
-                         domain=domain,
-                         ip=resolver.records[domain],
-                         ssl_info=ssl_info,
-                         user=session["user"],
-                         is_admin=session.get("is_admin", False))
+                          domain=domain,
+                          ip=resolver.records[domain],
+                          ssl_info=ssl_info,
+                          user=session["user"],
+                          is_admin=session.get("is_admin", False))
 
 # Rota para editar DOMÍNIO (não apenas IP) - CORRIGIDA
 @app.route("/edit/<domain>")
@@ -584,12 +584,12 @@ def delete_domain(domain):
 
             resolver.save_full_config(config)
 
-            # Remover configuração Nginx se existir
-            config_file = f"/etc/nginx/sites-enabled/{domain.replace('.', '_')}.conf"
-            if os.path.exists(config_file):
-                os.remove(config_file)
-                print(f"🗑️ Removido configuração Nginx: {config_file}")
-                resolver.reload_nginx()
+            # LIMPEZA AUTOMÁTICA COMPLETA: certificados SSL + configurações Nginx
+            resolver.cleanup_domain_ssl(domain)
+            print(f"🧹 Limpeza SSL completa realizada para: {domain}")
+
+            # Recarregar Nginx após limpeza
+            resolver.reload_nginx()
 
             flash(f"Removido: {domain} → {removed_ip}", "danger")
             print(f"✅ Removido com sucesso: {domain} → {removed_ip}")
@@ -722,10 +722,71 @@ def ssl_settings():
         resolver.ssl_config["auto_generate_ssl"] = auto_generate
         resolver.save_ssl_config()
         flash("Configurações SSL atualizadas!", "success")
-    
-    return render_template("ssl_settings.html", 
-                         ssl_config=resolver.ssl_config,
-                         user=session["user"])
+
+    return render_template("ssl_settings.html",
+                          ssl_config=resolver.ssl_config,
+                          user=session["user"])
+
+@app.route("/ssl-ca-settings", methods=["GET", "POST"])
+@login_required
+def ssl_ca_settings():
+    """Configurações da Autoridade Certificadora"""
+    if request.method == "POST":
+        action = request.form.get("action", "save")
+
+        if action == "save":
+            # Salvar configurações da CA
+            ca_config = {
+                "common_name": request.form.get("common_name", "DNS-Resolver-CA"),
+                "organization": request.form.get("organization", "Local Network"),
+                "organizational_unit": request.form.get("organizational_unit", ""),
+                "country": request.form.get("country", "BR"),
+                "validity_days": int(request.form.get("validity_days", 3650))
+            }
+            resolver.save_ca_config(ca_config)
+            flash("Configurações da Autoridade Certificadora salvas!", "success")
+
+        elif action == "regenerate":
+            # Regenerar certificado da CA
+            if resolver.regenerate_ca_certificate():
+                flash("Certificado da CA será regenerado. Novos certificados usarão as configurações atualizadas.", "warning")
+            else:
+                flash("Erro ao regenerar certificado da CA.", "danger")
+
+        return redirect("/ssl-ca-settings")
+
+    # Carregar configurações atuais
+    ca_config = resolver.load_ca_config()
+    ca_cert_info = resolver.get_ca_certificate_info()
+
+    return render_template("ssl_ca_settings.html",
+                          ca_config=ca_config,
+                          ca_cert_info=ca_cert_info,
+                          user=session["user"],
+                          is_admin=session.get("is_admin", False))
+
+@app.route("/cleanup-orphaned", methods=["POST"])
+@login_required
+def cleanup_orphaned():
+    """Executa limpeza de arquivos órfãos"""
+    if not session.get("is_admin"):
+        flash("Acesso negado. Somente administrador.", "danger")
+        return redirect("/")
+
+    try:
+        print("🧹 Iniciando limpeza manual de arquivos órfãos...")
+        result = resolver.cleanup_orphaned_files()
+
+        if result:
+            flash("Limpeza de arquivos órfãos concluída com sucesso!", "success")
+        else:
+            flash("Erro durante a limpeza de arquivos órfãos.", "danger")
+
+    except Exception as e:
+        print(f"❌ Erro na limpeza: {e}")
+        flash(f"Erro na limpeza: {e}", "danger")
+
+    return redirect("/admin")
 
 @app.route("/ssl-certificate", methods=["POST"])
 @login_required
@@ -734,18 +795,18 @@ def upload_ssl_certificate():
     if request.files.get("cert_file") and request.files.get("key_file"):
         cert_file = request.files["cert_file"]
         key_file = request.files["key_file"]
-        
+
         cert_file.save("/app/nginx/ssl/cert.pem")
         key_file.save("/app/nginx/ssl/key.pem")
-        
+
         # Remove marca de auto-geração
         auto_file = "/app/nginx/ssl/auto_generated.txt"
         if os.path.exists(auto_file):
             os.remove(auto_file)
-        
+
         resolver.reload_nginx()
         flash("Certificado SSL atualizado!", "success")
-    
+
     return redirect("/ssl-settings")
 
 @app.route("/debug-nginx")
@@ -753,7 +814,7 @@ def upload_ssl_certificate():
 def debug_nginx():
     """Rota de diagnóstico para Nginx"""
     import glob
-    
+
     debug_info = {
         "nginx_status": "running" if subprocess.run(["pgrep", "nginx"], capture_output=True).returncode == 0 else "stopped",
         "sites_available": glob.glob("/etc/nginx/sites-available/*.conf"),
@@ -762,7 +823,7 @@ def debug_nginx():
         "ssl_key_exists": os.path.exists("/etc/nginx/ssl/key.pem"),
         "nginx_config_test": subprocess.run(["nginx", "-t"], capture_output=True, text=True).stdout
     }
-    
+
     return jsonify(debug_info)
 
 @app.route("/debug-templates")

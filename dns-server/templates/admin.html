@@ -5,10 +5,29 @@
 {% block content %}
 <div class="container">
   <div class="topbar">
-    <h2>⚙️ Administração de Usuários</h2>
-    <div>
-      <a href="{{ url_for('index') }}" class="btn-secondary">← Voltar</a>
+    <h2>⚙️ Administração</h2>
+    <div class="topbar-actions">
+      <a href="{{ url_for('index') }}" class="btn-secondary">
+        <i class="icon">←</i> Voltar ao Painel
+      </a>
     </div>
+  </div>
+
+  <!-- Ações rápidas -->
+  <div class="quick-actions">
+    <a href="{{ url_for('ssl_ca_settings') }}" class="action-card">
+      <div class="action-icon">🏛️</div>
+      <div class="action-title">Autoridade Certificadora</div>
+      <div class="action-desc">Configurar certificado SSL da empresa</div>
+    </a>
+
+    <a href="#" onclick="if(confirm('Isso removerá certificados SSL e configurações Nginx órfãos. Continuar?')) { document.getElementById('cleanup-form').submit(); }" class="action-card">
+      <div class="action-icon">🧹</div>
+      <div class="action-title">Limpar Arquivos Órfãos</div>
+      <div class="action-desc">Remove certificados e configs não utilizados</div>
+    </a>
+
+    <form id="cleanup-form" method="post" action="/cleanup-orphaned" style="display: none;"></form>
   </div>
 
   <!-- Troca de senha do admin -->
@@ -40,7 +59,7 @@
       <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;">
         <div style="flex: 1; min-width: 150px;">
           <label for="username" style="display: block; margin-bottom: 5px; font-weight: 500;">Usuário:</label>
-          <input type="text" id="username" name="username" placeholder="Nome de usuário" required 
+          <input type="text" id="username" name="username" placeholder="Nome de usuário" required
                  pattern="^[a-zA-Z0-9_-]{3,20}$">
         </div>
         <div style="flex: 1; min-width: 150px;">
@@ -75,7 +94,7 @@
               <form method="post" style="display:inline;">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="username" value="{{ user }}">
-                <button type="submit" class="btn-danger btn-sm" 
+                <button type="submit" class="btn-danger btn-sm"
                         onclick="return confirm('Tem certeza que deseja excluir o usuário {{ user }}?')">
                   Excluir
                 </button>
@@ -84,7 +103,7 @@
                 <input type="hidden" name="action" value="reset">
                 <input type="hidden" name="username" value="{{ user }}">
                 <div style="display: inline-flex; gap: 5px;">
-                  <input type="password" name="new_password" placeholder="Nova senha" required minlength="6" 
+                  <input type="password" name="new_password" placeholder="Nova senha" required minlength="6"
                          style="padding: 4px 8px; font-size: 0.8rem; width: 120px;">
                   <button type="submit" class="btn-success btn-sm">Redefinir</button>
                 </div>
@@ -149,7 +168,7 @@ document.addEventListener('DOMContentLoaded', function() {
         showToast('A senha deve ter pelo menos 6 caracteres.', 'warning');
         return;
       }
-      
+
       const username = this.querySelector('input[name="username"]');
       if (username && !/^[a-zA-Z0-9_-]{3,20}$/.test(username.value)) {
         e.preventDefault();

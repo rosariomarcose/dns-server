@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Configurações CA SSL - Painel DNS{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <h2>🏛️ Autoridade Certificadora SSL</h2>
+    <div class="topbar-actions">
+      <a href="{{ url_for('admin_panel') }}" class="btn-secondary">
+        <i class="icon">←</i> Voltar à Administração
+      </a>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <h4>Configurações da CA</h4>
+          <small class="text-muted">Configure as informações da Autoridade Certificadora para certificados SSL</small>
+        </div>
+        <div class="card-body">
+          <form method="post">
+            <input type="hidden" name="action" value="save">
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="common_name">Nome Comum (CN):</label>
+                  <input type="text" class="form-control" id="common_name" name="common_name"
+                         value="{{ ca_config.common_name }}" placeholder="DNS-Resolver-CA" required>
+                  <small class="form-text text-muted">Nome da Autoridade Certificadora</small>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="organization">Organização (O):</label>
+                  <input type="text" class="form-control" id="organization" name="organization"
+                         value="{{ ca_config.organization }}" placeholder="Nome da Empresa" required>
+                  <small class="form-text text-muted">Nome da organização ou empresa</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label for="organizational_unit">Unidade Organizacional (OU):</label>
+                  <input type="text" class="form-control" id="organizational_unit" name="organizational_unit"
+                         value="{{ ca_config.organizational_unit }}" placeholder="TI, Desenvolvimento, etc.">
+                  <small class="form-text text-muted">Departamento ou setor (opcional)</small>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label for="country">País (C):</label>
+                  <input type="text" class="form-control" id="country" name="country"
+                         value="{{ ca_config.country }}" placeholder="BR" maxlength="2" required>
+                  <small class="form-text text-muted">Código do país (2 letras)</small>
+                </div>
+              </div>
+              <div class="col-md-3">
+                <div class="form-group">
+                  <label for="validity_days">Validade (dias):</label>
+                  <input type="number" class="form-control" id="validity_days" name="validity_days"
+                         value="{{ ca_config.validity_days }}" min="365" max="3650" required>
+                  <small class="form-text text-muted">Dias de validade da CA</small>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group mt-4">
+              <button type="submit" class="btn btn-primary">
+                💾 Salvar Configurações
+              </button>
+              <button type="submit" name="action" value="regenerate" class="btn btn-warning ml-2"
+                      onclick="return confirm('Tem certeza? Isso irá invalidar certificados existentes. Novos certificados usarão as configurações atualizadas.')">
+                🔄 Regenerar Certificado CA
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-header">
+          <h5>📋 Informações do Certificado CA</h5>
+        </div>
+        <div class="card-body">
+          {% if ca_cert_info %}
+            <dl class="row">
+              <dt class="col-sm-5">Subject:</dt>
+              <dd class="col-sm-7">{{ ca_cert_info.subject or 'N/A' }}</dd>
+
+              <dt class="col-sm-5">Issuer:</dt>
+              <dd class="col-sm-7">{{ ca_cert_info.issuer or 'N/A' }}</dd>
+
+              <dt class="col-sm-5">Emitido em:</dt>
+              <dd class="col-sm-7">{{ ca_cert_info.not_before or 'N/A' }}</dd>
+
+              <dt class="col-sm-5">Expira em:</dt>
+              <dd class="col-sm-7">{{ ca_cert_info.not_after or 'N/A' }}</dd>
+
+              <dt class="col-sm-5">Número Serial:</dt>
+              <dd class="col-sm-7">{{ ca_cert_info.serial or 'N/A' }}</dd>
+
+              <dt class="col-sm-5">Chave Pública:</dt>
+              <dd class="col-sm-7">{{ ca_cert_info.public_key_bits or 'N/A' }} bits</dd>
+            </dl>
+          {% else %}
+            <p class="text-muted">Nenhum certificado CA encontrado. Será criado automaticamente quando necessário.</p>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card mt-3">
+        <div class="card-header">
+          <h6>ℹ️ Sobre</h6>
+        </div>
+        <div class="card-body">
+          <p class="small text-muted">
+            As configurações aqui definem as informações que aparecerão nos certificados SSL emitidos pela Autoridade Certificadora local.
+            <br><br>
+            <strong>Nota:</strong> Alterar essas configurações não afeta certificados já emitidos. Para aplicar as mudanças, use "Regenerar Certificado CA".
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+dl.row dt {
+  font-weight: bold;
+  font-size: 0.875rem;
+}
+dl.row dd {
+  font-size: 0.875rem;
+  word-break: break-all;
+}
+</style>
+{% endblock %}

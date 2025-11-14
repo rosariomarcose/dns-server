@@ -4,6 +4,7 @@ import os
 import json
 import socket
 import subprocess
+import re
 from dnslib import DNSRecord, RR, A, TXT
 from dnslib.server import DNSServer, DNSLogger
 
@@ -69,6 +70,29 @@ class CustomResolver:
         else:
             self.ssl_config = {"auto_generate_ssl": True}
             self.save_ssl_config()
+
+    def load_ca_config(self):
+        """Carrega configurações da Autoridade Certificadora"""
+        ca_file = "/app/data/ca_config.json"
+        if os.path.exists(ca_file):
+            with open(ca_file, "r") as f:
+                return json.load(f)
+        else:
+            # Configurações padrão da CA
+            return {
+                "common_name": "DNS-Resolver-CA",
+                "organization": "Local Network",
+                "organizational_unit": "IT Department",
+                "country": "BR",
+                "validity_days": 3650
+            }
+
+    def save_ca_config(self, config):
+        """Salva configurações da Autoridade Certificadora"""
+        ca_file = "/app/data/ca_config.json"
+        with open(ca_file, "w") as f:
+            json.dump(config, f, indent=2)
+        print("💾 Configuração CA salva")
     
     def save_ssl_config(self):
         """Salva configurações SSL"""
@@ -166,16 +190,26 @@ class CustomResolver:
 
                 if not os.path.exists(ca_cert):
                     print("🏛️  Criando Autoridade Certificadora local...")
+                    ca_config = self.load_ca_config()
+
                     # Gerar chave privada da CA
                     subprocess.run([
                         "openssl", "genrsa", "-out", ca_key, "2048"
                     ], check=True, capture_output=True, timeout=30)
 
+                    # Construir subject da CA com configurações customizadas
+                    ca_subject = f"/CN={ca_config['common_name']}/O={ca_config['organization']}"
+                    if ca_config.get('organizational_unit'):
+                        ca_subject += f"/OU={ca_config['organizational_unit']}"
+                    if ca_config.get('country'):
+                        ca_subject += f"/C={ca_config['country']}"
+
                     # Gerar certificado da CA
                     subprocess.run([
                         "openssl", "req", "-x509", "-new", "-nodes", "-key", ca_key,
-                        "-sha256", "-days", "3650", "-out", ca_cert,
-                        "-subj", "/CN=DNS-Resolver-CA/O=Local Network/C=BR"
+                        "-sha256", "-days", str(ca_config.get('validity_days', 3650)),
+                        "-out", ca_cert,
+                        "-subj", ca_subject
                     ], check=True, capture_output=True, timeout=30)
                     print("✅ Autoridade Certificadora criada")
 
@@ -186,9 +220,18 @@ class CustomResolver:
 
                 # Criar CSR (Certificate Signing Request)
                 csr_file = f"{cert_dir}/{domain}.csr"
+                ca_config = self.load_ca_config()
+
+                # Usar configurações da CA para o certificado do domínio
+                domain_subject = f"/CN={domain}/O={ca_config['organization']}"
+                if ca_config.get('organizational_unit'):
+                    domain_subject += f"/OU={ca_config['organizational_unit']}"
+                if ca_config.get('country'):
+                    domain_subject += f"/C={ca_config['country']}"
+
                 subprocess.run([
                     "openssl", "req", "-new", "-key", key_file, "-out", csr_file,
-                    "-subj", f"/CN={domain}/O=Local Network/C=BR"
+                    "-subj", domain_subject
                 ], check=True, capture_output=True, timeout=30)
 
                 # Assinar certificado com a CA
@@ -386,6 +429,11 @@ server {
         domain_lower = domain.lower()
         config = self.get_full_config()
 
+        # Se está DESABILITANDO SSL, remove certificados automaticamente
+        if ssl_enabled is False and config.get("ssl_enabled", {}).get(domain_lower, False):
+            self.cleanup_ssl_certificates(domain)
+            print(f"🧹 Certificados SSL removidos para: {domain}")
+
         if ssl_enabled is not None:
             config["ssl_enabled"][domain_lower] = ssl_enabled
             # Se habilitando SSL, configura Nginx IMEDIATAMENTE
@@ -406,6 +454,189 @@ server {
             time.sleep(1)  # Pequena pausa para garantir que tudo foi salvo
             self.reload_nginx()
 
+        return True
+
+    def cleanup_ssl_certificates(self, domain):
+        """Remove certificados SSL de um domínio específico"""
+        cert_dir = "/etc/nginx/ssl"
+        domain_lower = domain.lower()
+
+        # Arquivos a remover
+        files_to_remove = [
+            f"{cert_dir}/{domain_lower}.crt",
+            f"{cert_dir}/{domain_lower}.key",
+            f"{cert_dir}/{domain_lower}.csr"
+        ]
+
+        for file_path in files_to_remove:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    print(f"🗑️ Removido: {file_path}")
+                except Exception as e:
+                    print(f"⚠️ Erro ao remover {file_path}: {e}")
+
+    def cleanup_domain_ssl(self, domain):
+        """Remove todos os arquivos SSL relacionados a um domínio (usado na remoção completa)"""
+        cert_dir = "/etc/nginx/ssl"
+        sites_available = "/etc/nginx/sites-available"
+        sites_enabled = "/etc/nginx/sites-enabled"
+
+        domain_lower = domain.lower()
+        domain_filename = domain_lower.replace('.', '_')
+
+        # Remove certificados
+        self.cleanup_ssl_certificates(domain)
+
+        # Remove configurações Nginx
+        nginx_files = [
+            f"{sites_available}/{domain_filename}.conf",
+            f"{sites_enabled}/{domain_filename}.conf"
+        ]
+
+        for file_path in nginx_files:
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    print(f"🗑️ Removido configuração Nginx: {file_path}")
+                except Exception as e:
+                    print(f"⚠️ Erro ao remover {file_path}: {e}")
+
+    def get_ca_certificate_info(self):
+        """Retorna informações do certificado da CA"""
+        ca_cert_path = "/etc/nginx/ssl/ca.crt"
+        if not os.path.exists(ca_cert_path):
+            return None
+
+        try:
+            # Usar openssl para obter informações do certificado
+            result = subprocess.run([
+                "openssl", "x509", "-in", ca_cert_path, "-text", "-noout"
+            ], capture_output=True, text=True, timeout=10)
+
+            if result.returncode == 0:
+                cert_text = result.stdout
+
+                # Extrair informações básicas
+                info = {}
+
+                # Subject
+                subject_match = re.search(r'Subject: (.+)', cert_text)
+                if subject_match:
+                    info['subject'] = subject_match.group(1).strip()
+
+                # Issuer
+                issuer_match = re.search(r'Issuer: (.+)', cert_text)
+                if issuer_match:
+                    info['issuer'] = issuer_match.group(1).strip()
+
+                # Validity
+                not_before_match = re.search(r'Not Before: (.+)', cert_text)
+                not_after_match = re.search(r'Not After : (.+)', cert_text)
+                if not_before_match:
+                    info['not_before'] = not_before_match.group(1).strip()
+                if not_after_match:
+                    info['not_after'] = not_after_match.group(1).strip()
+
+                # Serial Number
+                serial_match = re.search(r'Serial Number:\s*([0-9A-Fa-f:]+)', cert_text)
+                if serial_match:
+                    info['serial'] = serial_match.group(1).strip()
+
+                # Public Key
+                pubkey_match = re.search(r'Public-Key: \(([0-9]+) bit\)', cert_text)
+                if pubkey_match:
+                    info['public_key_bits'] = pubkey_match.group(1)
+
+                return info
+
+        except Exception as e:
+            print(f"Erro ao obter informações do certificado CA: {e}")
+
+        return None
+
+    def regenerate_ca_certificate(self):
+        """Regenera o certificado da CA com as novas configurações"""
+        cert_dir = "/etc/nginx/ssl"
+        ca_cert = f"{cert_dir}/ca.crt"
+        ca_key = f"{cert_dir}/ca.key"
+
+        try:
+            # Backup do certificado antigo
+            if os.path.exists(ca_cert):
+                backup_file = f"{ca_cert}.backup.{int(time.time())}"
+                import shutil
+                shutil.copy2(ca_cert, backup_file)
+                print(f"📋 Backup do certificado antigo criado: {backup_file}")
+
+            # Remover certificado antigo
+            if os.path.exists(ca_cert):
+                os.remove(ca_cert)
+
+            # A CA será recriada automaticamente na próxima geração de certificado
+            print("✅ Certificado CA será regenerado na próxima emissão")
+            return True
+
+        except Exception as e:
+            print(f"❌ Erro ao regenerar certificado CA: {e}")
+            return False
+
+    def cleanup_orphaned_files(self):
+        """Remove arquivos órfãos: certificados SSL e configurações Nginx não correspondentes a domínios ativos"""
+        print("🧹 Iniciando limpeza de arquivos órfãos...")
+
+        # Carregar domínios ativos
+        config = self.get_full_config()
+        active_domains = set(config.get("hosts", {}).keys())
+        active_domains_lower = {domain.lower() for domain in active_domains}
+
+        # Arquivos protegidos (não remover)
+        protected_files = {"ca.crt", "ca.key", "cert.pem", "key.pem"}
+
+        # 1. Limpar certificados SSL órfãos
+        cert_dir = "/etc/nginx/ssl"
+        if os.path.exists(cert_dir):
+            print("🔍 Verificando certificados SSL...")
+            for filename in os.listdir(cert_dir):
+                if filename in protected_files:
+                    continue  # Preservar arquivos da CA e certificados padrão
+
+                # Verificar se é certificado de domínio (formato: dominio.crt, dominio.key)
+                if filename.endswith('.crt') or filename.endswith('.key') or filename.endswith('.csr'):
+                    # Extrair nome do domínio do filename
+                    domain_name = filename.rsplit('.', 1)[0]  # Remove extensão
+
+                    # Verificar se domínio ainda existe
+                    if domain_name.lower() not in active_domains_lower:
+                        file_path = os.path.join(cert_dir, filename)
+                        try:
+                            os.remove(file_path)
+                            print(f"🗑️ Certificado órfão removido: {filename}")
+                        except Exception as e:
+                            print(f"⚠️ Erro ao remover certificado {filename}: {e}")
+
+        # 2. Limpar configurações Nginx órfãs
+        sites_available_dir = "/etc/nginx/sites-available"
+        sites_enabled_dir = "/etc/nginx/sites-enabled"
+
+        for directory in [sites_available_dir, sites_enabled_dir]:
+            if os.path.exists(directory):
+                print(f"🔍 Verificando configurações em {directory}...")
+                for filename in os.listdir(directory):
+                    if filename.endswith('.conf'):
+                        # Extrair nome do domínio do filename (formato: dominio_com_br.conf)
+                        domain_name = filename.replace('_', '.').replace('.conf', '')
+
+                        # Verificar se domínio ainda existe
+                        if domain_name.lower() not in active_domains_lower:
+                            file_path = os.path.join(directory, filename)
+                            try:
+                                os.remove(file_path)
+                                print(f"🗑️ Configuração Nginx órfã removida: {filename}")
+                            except Exception as e:
+                                print(f"⚠️ Erro ao remover configuração {filename}: {e}")
+
+        print("✅ Limpeza de arquivos órfãos concluída")
         return True
 
     def resolve(self, request, handler):

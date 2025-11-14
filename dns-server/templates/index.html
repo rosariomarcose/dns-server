@@ -4,30 +4,34 @@
 <div class="container">
   <div class="topbar">
     <h2>⚡ Servidor DNS Local (Apenas Rede Interna)</h2>
-    <div class="user-menu">
-      <div class="user-icon" onclick="toggleMenu()">👤</div>
-      <div class="menu-dropdown" id="menuDropdown">
-        {% if session.get('is_admin') %}
-          <a href="/admin" class="menu-item">⚙️ Configurações</a>
-        {% endif %}
-        <form method="POST" action="/logout" style="margin:0;">
-          <button type="submit" class="menu-item">🚪 Logout</button>
-        </form>
+    <div class="topbar-actions">
+      <div class="topbar-icons">
+        <a href="/ca-cert" class="ssl-notice-icon-small" download="dns-resolver-ca.crt"
+           title="Baixar Certificado SSL CA
+
+Para acessar HTTPS sem avisos de segurança,
+baixe e instale este certificado CA
+nas Autoridades de Certificação Confiáveis
+do seu sistema.
+
+Clique para baixar automaticamente.">
+          🔐
+        </a>
+        <div class="user-menu">
+          <div class="user-icon" onclick="toggleMenu()">👤</div>
+          <div class="menu-dropdown" id="menuDropdown">
+            {% if session.get('is_admin') %}
+              <a href="/admin" class="menu-item">⚙️ Configurações</a>
+            {% endif %}
+            <form method="POST" action="/logout" style="margin:0;">
+              <button type="submit" class="menu-item">🚪 Logout</button>
+            </form>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Download Certificado CA -->
-  <div class="card">
-    <h3>🔐 Certificado SSL (Opcional)</h3>
-    <p class="text-muted">Para acessar HTTPS sem avisos de segurança, baixe e instale o certificado CA:</p>
-    <a href="/ca-cert" class="btn-primary" download="dns-resolver-ca.crt" style="text-decoration: none;">
-      📥 Baixar Certificado CA
-    </a>
-    <p class="text-muted" style="margin-top: 10px; font-size: 12px;">
-      Instale este certificado nas Autoridades de Certificação Confiáveis do seu sistema
-    </p>
-  </div>
 
   <!-- Form adicionar DNS COM SSL -->
   <div class="card">
@@ -293,10 +297,11 @@ function isValidDomain(domain) {
   return pattern.test(domain) && domain.length <= 253;
 }
 
+
 // Inicializar quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function() {
   setupCopyButtons();
-  
+
   // Se estiver em modo de edição, rolar para o formulário de edição
   const urlParams = new URLSearchParams(window.location.search);
   if (urlParams.has('edit')) {

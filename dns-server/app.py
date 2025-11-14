@@ -866,7 +866,7 @@ def download_ca_cert():
 # -----------------------------
 if __name__ == "__main__":
     print("""
-    ⚡ DNS SERVER LOCAL (APENAS REDE INTERNA)
+    ⚡ DNS SERVER - LAN
     📊 Painel: http://192.168.5.248:8000
     🌐 DNS:    127.0.0.1:53
     """)

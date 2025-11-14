@@ -80,7 +80,7 @@ else
     echo "📄 Certificado padrão já existe"
 fi
 
-# Template para domínios (CORRIGIDO - usando placeholders simples)
+# Template para domínios (CORRIGIDO - HTTPS sempre na porta 443)
 echo "📄 Configurando template para domínios..."
 cat > /app/nginx/templates/server_template.conf << 'EOF'
 # Template para configuração de servidores Nginx
@@ -93,16 +93,16 @@ server {
 }
 
 server {
-    listen ssl_port ssl;
+    listen 443 ssl;
     server_name domain;
-    
+
     ssl_certificate cert_file;
     ssl_certificate_key key_file;
-    
+
     ssl_protocols TLSv1.2 TLSv1.3;
-    
+
     location / {
-        proxy_pass http://ip:http_port;
+        proxy_pass http://ip:ssl_port;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

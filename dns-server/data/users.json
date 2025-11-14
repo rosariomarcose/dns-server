@@ -1,18 +1,6 @@
 {
   "admin": {
-    "password": "$2b$12$wW/sZAdGQaqYJf32n67/neufRpr5PqUeCSyM.lj5iM.lIOTWQ/jW2",
+    "password": "$2b$12$Cluad6p0rSSLvn3B9YPw1eNkPQ4NrlSbkjuVT3..e.ismi92gy83G",
     "is_admin": true
-  },
-  "rosario": {
-    "password": "$2b$12$EObwcoujJdLwAkaJr6X5s.xLzZSWKUSEK0AKo338ZEj1XELgSdHvy",
-    "is_admin": false
-  },
-  "junior": {
-    "password": "$2b$12$XREp3kAxeJn2ZVS2J2PWRuxpO/prj0qRa.UTrCcIRvYiibvfEwSZy",
-    "is_admin": false
-  },
-  "felipe": {
-    "password": "$2b$12$t5djy1kn5S6TO9zne23ap.MQyciW9FRF4nLJKLJ8qeWAiY1q/khgO",
-    "is_admin": false
   }
 }

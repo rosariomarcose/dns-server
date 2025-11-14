@@ -28,17 +28,20 @@ class CustomResolver:
         """Garante que todos os domínios com SSL estão configurados no Nginx"""
         print("🔧 Verificando configurações SSL existentes...")
         config = self.get_full_config()
-        
+
         for domain, ssl_enabled in config.get("ssl_enabled", {}).items():
-            if ssl_enabled and domain in self.records:
+            if domain in self.records:  # Verificar se domínio existe nos registros
                 ssl_port = config.get("ssl_ports", {}).get(domain, 443)
                 http_port = config.get("http_ports", {}).get(domain, 80)
-                
+
                 # Verificar se a configuração já existe
                 config_file = f"/etc/nginx/sites-available/{domain.replace('.', '_')}.conf"
                 if not os.path.exists(config_file):
                     print(f"⚠️  Configuração faltando para {domain}, recriando...")
-                    self.configure_nginx_ssl(domain, ssl_port, http_port)
+                    if ssl_enabled:
+                        self.configure_nginx_ssl(domain, ssl_port, http_port)
+                    else:
+                        self.configure_nginx_http(domain, http_port)  # Nova função para HTTP
 
     def load_records(self):
         if not os.path.exists(DATA_FILE):
@@ -170,7 +173,92 @@ class CustomResolver:
                 
             except Exception as e:
                 print(f"❌ Erro ao configurar SSL para {domain}: {e}")
-    
+
+    def configure_nginx_http(self, domain, http_port=80):
+        """Configura Nginx para um domínio SEM SSL (apenas HTTP)"""
+        with self.nginx_lock:
+            try:
+                # Configurar Nginx sem SSL
+                success = self.update_nginx_config_http(domain, http_port)
+
+                if success:
+                    print(f"🌐 HTTP configurado para: {domain}")
+                else:
+                    print(f"❌ Falha ao configurar HTTP para: {domain}")
+
+            except Exception as e:
+                print(f"❌ Erro ao configurar HTTP para {domain}: {e}")
+
+    def update_nginx_config_http(self, domain, http_port=80):
+        """Atualiza configuração do Nginx para um domínio APENAS HTTP (sem SSL)"""
+        print(f"🔧 Iniciando configuração Nginx HTTP para: {domain}")
+
+        # ESTRUTURA PADRÃO: sites-available e sites-enabled
+        sites_available_dir = "/etc/nginx/sites-available"
+        sites_enabled_dir = "/etc/nginx/sites-enabled"
+        os.makedirs(sites_available_dir, exist_ok=True)
+        os.makedirs(sites_enabled_dir, exist_ok=True)
+
+        # Verificar se o domínio existe nos registros
+        if domain.lower() not in self.records:
+            print(f"❌ Domínio {domain} não encontrado nos registros DNS")
+            return False
+
+        ip = self.records[domain.lower()]
+        print(f"📡 Configurando {domain} → {ip}:{http_port} (HTTP ONLY)")
+
+        # Template para configuração HTTP ONLY
+        config_content = f"""server {{
+    listen {http_port};
+    server_name {domain};
+
+    location / {{
+        proxy_pass http://{ip}:{http_port};
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Configurações adicionais para melhor compatibilidade
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+    }}
+}}
+"""
+
+        # ESTRUTURA PADRÃO: criar em sites-available e ativar em sites-enabled
+        config_file_available = f"{sites_available_dir}/{domain.replace('.', '_')}.conf"
+        config_file_enabled = f"{sites_enabled_dir}/{domain.replace('.', '_')}.conf"
+
+        # Salvar em sites-available
+        try:
+            with open(config_file_available, "w") as f:
+                f.write(config_content)
+            print(f"💾 Configuração HTTP salva em: {config_file_available}")
+        except Exception as e:
+            print(f"❌ Erro ao salvar configuração HTTP: {e}")
+            return False
+
+        # Criar symlink em sites-enabled (estrutura padrão)
+        try:
+            if os.path.exists(config_file_enabled):
+                os.remove(config_file_enabled)
+                print(f"🗑️  Removido link anterior: {config_file_enabled}")
+
+            os.symlink(config_file_available, config_file_enabled)
+            print(f"🔗 Link criado: {config_file_enabled} → {config_file_available}")
+        except Exception as e:
+            print(f"❌ Erro ao criar symlink: {e}")
+            return False
+
+        print(f"✅ Site HTTP configurado: {domain}")
+        print(f"   - IP: {ip}")
+        print(f"   - HTTP Port: {http_port}")
+
+        return self.test_and_reload_nginx()
+
     def generate_ssl_certificate(self, domain):
         """Gera certificado SSL INDIVIDUAL para cada domínio"""
         cert_dir = "/etc/nginx/ssl"
@@ -292,7 +380,7 @@ class CustomResolver:
             except Exception as e:
                 print(f"⚠️ Erro ao ler template {template_file}: {e}")
         
-        # Template fallback CORRIGIDO - usando placeholders simples
+        # Template fallback CORRIGIDO - HTTPS sempre na porta 443
         if not custom_template:
             custom_template = """
 server {
@@ -302,13 +390,13 @@ server {
 }
 
 server {
-    listen ssl_port ssl;
+    listen 443 ssl;
     server_name domain;
     ssl_certificate cert_file;
     ssl_certificate_key key_file;
     ssl_protocols TLSv1.2 TLSv1.3;
     location / {
-        proxy_pass http://ip:http_port;
+        proxy_pass http://ip:ssl_port;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -436,10 +524,13 @@ server {
 
         if ssl_enabled is not None:
             config["ssl_enabled"][domain_lower] = ssl_enabled
-            # Se habilitando SSL, configura Nginx IMEDIATAMENTE
+            # Configura Nginx IMEDIATAMENTE independente do SSL
             if ssl_enabled:
                 print(f"🚀 Configurando SSL para: {domain}")
                 self.configure_nginx_ssl(domain, ssl_port or 443, http_port or 80)
+            else:
+                print(f"🌐 Configurando HTTP para: {domain}")
+                self.configure_nginx_http(domain, http_port or 80)
 
         if ssl_port is not None:
             config["ssl_ports"][domain_lower] = ssl_port
@@ -477,7 +568,7 @@ server {
                     print(f"⚠️ Erro ao remover {file_path}: {e}")
 
     def cleanup_domain_ssl(self, domain):
-        """Remove todos os arquivos SSL relacionados a um domínio (usado na remoção completa)"""
+        """Remove todos os arquivos SSL/HTTP relacionados a um domínio (usado na remoção completa)"""
         cert_dir = "/etc/nginx/ssl"
         sites_available = "/etc/nginx/sites-available"
         sites_enabled = "/etc/nginx/sites-enabled"
@@ -488,7 +579,7 @@ server {
         # Remove certificados
         self.cleanup_ssl_certificates(domain)
 
-        # Remove configurações Nginx
+        # Remove configurações Nginx (tanto SSL quanto HTTP)
         nginx_files = [
             f"{sites_available}/{domain_filename}.conf",
             f"{sites_enabled}/{domain_filename}.conf"
@@ -695,9 +786,11 @@ server {
         domain_lower = domain.lower()
         if domain_lower in self.records:
             ssl_info = self.get_ssl_info(domain)
+            print(f"🔧 Verificando configuração Nginx para: {domain}")
             if ssl_info["ssl_enabled"]:
-                print(f"🔧 Verificando configuração Nginx para: {domain}")
                 self.configure_nginx_ssl(domain, ssl_info["ssl_port"], ssl_info["http_port"])
+            else:
+                self.configure_nginx_http(domain, ssl_info["http_port"])
 
 def start_dns_server(resolver):
     logger = DNSLogger(prefix=False)

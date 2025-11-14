@@ -7,7 +7,8 @@
     "homolog_api.waybe.com.br": "192.168.5.20",
     "homolog_erp.waybe.com.br": "192.168.5.20",
     "dns-resolver.waybe.com.br": "192.168.5.248",
-    "teste.rapido.com.br": "192.168.5.216"
+    "teste.rapido.com.br": "192.168.5.216",
+    "testes.teste.com.br": "192.168.5.255"
   },
   "ssl_enabled": {
     "dev_api.waybe.com.br": false,
@@ -17,7 +18,8 @@
     "homolog_api.waybe.com.br": false,
     "homolog_erp.waybe.com.br": false,
     "dns-resolver.waybe.com.br": true,
-    "teste.rapido.com.br": true
+    "teste.rapido.com.br": true,
+    "testes.teste.com.br": true
   },
   "ssl_ports": {
     "dev_api.waybe.com.br": 443,
@@ -27,7 +29,8 @@
     "homolog_api.waybe.com.br": 443,
     "homolog_erp.waybe.com.br": 443,
     "dns-resolver.waybe.com.br": 443,
-    "teste.rapido.com.br": 8443
+    "teste.rapido.com.br": 8443,
+    "testes.teste.com.br": 443
   },
   "http_ports": {
     "dev_api.waybe.com.br": 80,
@@ -37,6 +40,7 @@
     "homolog_api.waybe.com.br": 80,
     "homolog_erp.waybe.com.br": 80,
     "dns-resolver.waybe.com.br": 8000,
-    "teste.rapido.com.br": 8080
+    "teste.rapido.com.br": 8080,
+    "testes.teste.com.br": 80
   }
 }

@@ -1,21 +1,15 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="container ssl-config-container">
-  <div class="topbar">
-    <h2>🔒 Configuração SSL</h2>
-    <div class="user-menu">
-      <div class="user-icon" onclick="toggleMenu()">👤</div>
-      <div class="menu-dropdown" id="menuDropdown">
-        {% if session.get('is_admin') %}
-          <a href="/admin" class="menu-item">⚙️ Configurações</a>
-        {% endif %}
-        <form method="POST" action="/logout" style="margin:0;">
-          <button type="submit" class="menu-item">🚪 Logout</button>
-        </form>
-      </div>
-    </div>
-  </div>
+<div class="container">
+ <div class="topbar">
+   <h2>🔒 Configuração SSL</h2>
+   <div class="topbar-actions">
+     <a href="/" class="btn-secondary">
+       <i class="icon">←</i> Voltar ao Painel
+     </a>
+   </div>
+ </div>
 
   <!-- Informações do Domínio -->
   <div class="card domain-info">
@@ -73,7 +67,6 @@
         <button type="submit" class="btn-primary">
           💾 Salvar Configurações
         </button>
-        <a href="/" class="btn-secondary">← Voltar ao Painel</a>
       </div>
     </form>
   </div>
@@ -105,28 +98,11 @@
 
 {% block scripts %}
 <script>
-function toggleMenu() {
-  const menu = document.getElementById('menuDropdown');
-  if (menu) {
-    menu.style.display = menu.style.display === 'block' ? 'none' : 'block';
-  }
-}
-
-// Fechar menu ao clicar fora
-document.addEventListener('click', (e) => {
-  const menu = document.getElementById('menuDropdown');
-  const icon = document.querySelector('.user-icon');
-  
-  if (menu && icon && !icon.contains(e.target) && !menu.contains(e.target)) {
-    menu.style.display = 'none';
-  }
-});
-
 // Feedback visual para o checkbox
 document.addEventListener('DOMContentLoaded', function() {
   const checkbox = document.querySelector('input[name="ssl_enabled"]');
   const portsConfig = document.querySelector('.ports-config');
-  
+
   function togglePortsVisibility() {
     if (checkbox.checked) {
       portsConfig.style.opacity = '1';
@@ -136,10 +112,10 @@ document.addEventListener('DOMContentLoaded', function() {
       portsConfig.style.pointerEvents = 'none';
     }
   }
-  
+
   // Aplicar estado inicial
   togglePortsVisibility();
-  
+
   // Adicionar listener
   checkbox.addEventListener('change', togglePortsVisibility);
 });

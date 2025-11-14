@@ -7,8 +7,21 @@
   <div class="topbar">
     <h2>🏛️ Autoridade Certificadora SSL</h2>
     <div class="topbar-actions">
-      <a href="{{ url_for('admin_panel') }}" class="btn-secondary">
-        <i class="icon">←</i> Voltar à Administração
+      <div class="topbar-icons">
+        <a href="/ca-cert" class="ssl-notice-icon-small" download="dns-resolver-ca.crt"
+           title="Baixar Certificado SSL CA
+
+Para acessar HTTPS sem avisos de segurança,
+baixe e instale este certificado CA
+nas Autoridades de Certificação Confiáveis
+do seu sistema.
+
+Clique para baixar automaticamente.">
+          🔐
+        </a>
+      </div>
+      <a href="/" class="btn-secondary">
+        <i class="icon">←</i> Voltar ao Painel
       </a>
     </div>
   </div>
@@ -118,6 +131,8 @@
 
       <div class="card mt-3">
         <div class="card-header">
+{% block scripts %}
+{% endblock %}
           <h6>ℹ️ Sobre</h6>
         </div>
         <div class="card-body">

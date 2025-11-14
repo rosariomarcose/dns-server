@@ -1,8 +1,8 @@
 services:
-  dns-server:
-    # image: sifatsistemas/servidor-dns:main
+  dns-resolver:
+    # image: dns-resolver:main
     build: .
-    container_name: dns-server
+    container_name: dns-resolver
     volumes:
       - ./dns-server/data:/app/data:rw
       - ./dns-server/templates:/app/templates:rw 

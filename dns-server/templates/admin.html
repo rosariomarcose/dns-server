@@ -21,12 +21,19 @@
       <div class="action-desc">Configurar certificado SSL da empresa</div>
     </a>
 
+    <a href="#" onclick="if(confirm('⚠️ ATENÇÃO: RESET TOTAL DO SISTEMA ⚠️\n\nEsta ação irá:\n• Remover TODOS os registros DNS\n• Resetar senha do admin para padrão\n• Remover todos os certificados SSL\n• Limpar todas as configurações customizadas\n• Restaurar o sistema ao estado de fábrica\n\n❌ Esta ação é IRREVERSÍVEL!\n\nDeseja continuar?')) { const confirmText = prompt('Para confirmar o RESET TOTAL, digite exatamente: RESET'); if(confirmText === 'RESET') { document.getElementById('restore-form').submit(); } else { alert('Confirmação incorreta. Reset cancelado.'); } }" class="action-card">
+      <div class="action-icon">🔄</div>
+      <div class="action-title">Reset Total</div>
+      <div class="action-desc">Restaura o sistema ao estado padrão de fábrica</div>
+    </a>
+
     <a href="#" onclick="if(confirm('Isso removerá certificados SSL e configurações Nginx órfãos. Continuar?')) { document.getElementById('cleanup-form').submit(); }" class="action-card">
       <div class="action-icon">🧹</div>
       <div class="action-title">Limpar Arquivos Órfãos</div>
       <div class="action-desc">Remove certificados e configs não utilizados</div>
     </a>
 
+    <form id="restore-form" method="post" action="/full-restore" style="display: none;"></form>
     <form id="cleanup-form" method="post" action="/cleanup-orphaned" style="display: none;"></form>
   </div>
 

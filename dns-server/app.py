@@ -91,12 +91,6 @@ def save_users(users):
     with open(USERS_FILE, "w") as f:
         json.dump(users, f, indent=2)
 
-# Atualizar senha do admin para sft6033
-users = load_users()
-admin_pass = bcrypt.hashpw("sft6033".encode(), bcrypt.gensalt()).decode()
-users["admin"]["password"] = admin_pass
-save_users(users)
-
 print("🔄 Aplicando correção de inicialização do resolver...")
 resolver = CustomResolver()
 print("✅ Resolver inicializado com sucesso")
@@ -663,6 +657,96 @@ def admin_panel():
     return render_template("admin.html", users=users)
 
 # -----------------------------
+# -----------------------------
+# Reset Total do Sistema
+# -----------------------------
+@app.route("/full-restore", methods=["POST"])
+@login_required
+def full_restore():
+    """Reset total do sistema - APENAS ADMIN"""
+    if not session.get("is_admin"):
+        flash("Acesso negado. Somente administrador.", "danger")
+        return redirect("/")
+
+    try:
+        print("🔄 Iniciando RESET TOTAL DO SISTEMA...")
+
+        # 1. Limpar todos os registros DNS
+        print("🗑️ Removendo todos os registros DNS...")
+        resolver.records.clear()
+
+        # Resetar configuração completa
+        default_config = {
+            "hosts": {},
+            "ssl_enabled": {},
+            "ssl_ports": {},
+            "http_ports": {}
+        }
+        resolver.save_full_config(default_config)
+
+        # 2. Resetar usuários para apenas admin padrão
+        print("👤 Resetando usuários...")
+        admin_pass = bcrypt.hashpw("admin123".encode(), bcrypt.gensalt()).decode()
+        default_users = {"admin": {"password": admin_pass, "is_admin": True}}
+        with open(USERS_FILE, "w") as f:
+            json.dump(default_users, f, indent=2)
+
+        # 3. Limpar certificados SSL
+        print("🧹 Limpando certificados SSL...")
+        cert_dir = "/etc/nginx/ssl"
+        if os.path.exists(cert_dir):
+            import shutil
+            for filename in os.listdir(cert_dir):
+                if filename not in ["ca.crt", "ca.key"]:  # Preservar CA se existir
+                    file_path = os.path.join(cert_dir, filename)
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
+                        print(f"🗑️ Removido: {filename}")
+
+        # 4. Limpar configurações Nginx
+        print("🧹 Limpando configurações Nginx...")
+        sites_dirs = ["/etc/nginx/sites-available", "/etc/nginx/sites-enabled"]
+        for sites_dir in sites_dirs:
+            if os.path.exists(sites_dir):
+                for filename in os.listdir(sites_dir):
+                    if filename.endswith('.conf'):
+                        file_path = os.path.join(sites_dir, filename)
+                        if os.path.isfile(file_path):
+                            os.remove(file_path)
+                            print(f"🗑️ Removido config: {filename}")
+
+        # 5. Resetar configurações SSL e CA
+        print("🔧 Resetando configurações SSL/CA...")
+        resolver.ssl_config = {"auto_generate_ssl": True}
+        resolver.save_ssl_config()
+
+        # Resetar CA config para padrão
+        default_ca_config = {
+            "common_name": "DNS-Resolver-CA",
+            "organization": "Local Network",
+            "organizational_unit": "IT Department",
+            "country": "BR",
+            "validity_days": 3650
+        }
+        resolver.save_ca_config(default_ca_config)
+
+        # 6. Recarregar Nginx
+        print("🔄 Recarregando Nginx...")
+        resolver.reload_nginx()
+
+        # 7. Limpar sessão e redirecionar
+        session.clear()
+        print("✅ RESET TOTAL CONCLUÍDO!")
+        flash("Sistema restaurado ao estado de fábrica. Faça login com admin/admin123.", "success")
+        return redirect("/login")
+
+    except Exception as e:
+        print(f"❌ Erro durante reset total: {e}")
+        import traceback
+        print(f"📋 Trace: {traceback.format_exc()}")
+        flash(f"Erro durante reset total: {e}", "danger")
+        return redirect("/admin")
+
 # Alteração de senha segura para admin
 # -----------------------------
 @app.route("/change_password", methods=["POST"])

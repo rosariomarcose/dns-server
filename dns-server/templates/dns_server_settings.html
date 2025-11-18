@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+
+{% block title %}Configurações DNS - Painel DNS{% endblock %}
+
+{% block content %}
+<div class="container">
+  <div class="topbar">
+    <h2>🌐 Configurações DNS</h2>
+    <div class="topbar-actions">
+      <a href="{{ url_for('admin_panel') }}" class="btn-secondary">
+        <i class="icon">←</i> Voltar à Administração
+      </a>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>🔍 Configurações do Servidor DNS</h3>
+    <form method="post" action="/dns-server-settings">
+      <div style="display: grid; gap: 20px;">
+
+        <div class="form-group">
+          <label for="server_hostname">Nome do servidor (PTR record):</label>
+          <input type="text" id="server_hostname" name="server_hostname"
+                 value="{{ dns_config.server_hostname or 'dns-server.local' }}"
+                 placeholder="Ex: dns-server.local"
+                 pattern="^[a-zA-Z0-9]([a-zA-Z0-9\.\-_]{0,61}[a-zA-Z0-9])?$"
+                 title="Nome válido para domínio (letras, números, pontos, hífens e underscores)">
+          <small class="form-help">
+            Este nome aparecerá no nslookup como "Servidor: [nome]".<br>
+            Deve ser um nome de domínio válido (ex: dns-server.local ou servidor-dns.empresa.com.br).
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="server_ip">IP do servidor:</label>
+          <input type="text" id="server_ip" name="server_ip"
+                 value="{{ dns_config.server_ip or '192.168.4.100' }}"
+                 placeholder="192.168.4.100"
+                 readonly>
+          <small class="form-help">
+            IP atual do servidor DNS (somente leitura).
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="upstream_dns">DNS upstream:</label>
+          <input type="text" id="upstream_dns" name="upstream_dns"
+                 value="{{ dns_config.upstream_dns or '8.8.8.8' }}"
+                 placeholder="8.8.8.8"
+                 pattern="^(\d{1,3}\.){3}\d{1,3}$"
+                 title="Endereço IP válido (ex: 8.8.8.8)">
+          <small class="form-help">
+            DNS externo usado para consultas não locais.
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label for="upstream_port">Porta upstream:</label>
+          <input type="number" id="upstream_port" name="upstream_port"
+                 value="{{ dns_config.upstream_port or 53 }}"
+                 min="1" max="65535">
+          <small class="form-help">
+            Porta do DNS upstream (padrão: 53).
+          </small>
+        </div>
+
+      </div>
+
+      <div style="margin-top: 20px;">
+        <button type="submit" class="btn-success">Salvar configurações</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h3>📋 Informações do servidor</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+      <div>
+        <strong>Hostname:</strong> {{ dns_config.server_hostname or 'Não configurado' }}
+      </div>
+      <div>
+        <strong>IP do servidor:</strong> {{ dns_config.server_ip or 'Não configurado' }}
+      </div>
+      <div>
+        <strong>DNS upstream:</strong> {{ dns_config.upstream_dns or '8.8.8.8' }}:{{ dns_config.upstream_port or 53 }}
+      </div>
+      <div>
+        <strong>Status do serviço:</strong>
+        <span style="color: var(--success);">✅ Ativo</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Validação do formulário
+document.addEventListener('DOMContentLoaded', function() {
+  const form = document.querySelector('form');
+
+  form.addEventListener('submit', function(e) {
+    const hostname = document.getElementById('server_hostname').value.trim();
+    const upstreamDns = document.getElementById('upstream_dns').value.trim();
+
+    // Validar hostname
+    const hostnamePattern = /^[a-zA-Z0-9]([a-zA-Z0-9\.\-_]{0,61}[a-zA-Z0-9])?$/;
+    if (!hostnamePattern.test(hostname)) {
+      e.preventDefault();
+      showToast('Nome do servidor inválido. Use apenas letras, números, pontos, hífens e underscores.', 'warning');
+      return;
+    }
+
+    // Validar IP do upstream DNS
+    const ipPattern = /^(\d{1,3}\.){3}\d{1,3}$/;
+    if (!ipPattern.test(upstreamDns)) {
+      e.preventDefault();
+      showToast('DNS upstream deve ser um endereço IP válido (ex: 8.8.8.8).', 'warning');
+      return;
+    }
+
+    // Validar octetos do IP
+    const octets = upstreamDns.split('.');
+    for (let octet of octets) {
+      const num = parseInt(octet);
+      if (num < 0 || num > 255) {
+        e.preventDefault();
+        showToast('DNS upstream contém octeto inválido (deve ser 0-255).', 'warning');
+        return;
+      }
+    }
+
+    showToast('Configurações salvas com sucesso!', 'success');
+  });
+});
+
+// Função showToast
+function showToast(message, type = "success") {
+  const container = document.getElementById('toast-container') || document.body;
+  const toast = document.createElement('div');
+  toast.className = 'toast show';
+  toast.textContent = message;
+
+  switch(type) {
+    case 'success': toast.style.background = 'var(--success)'; break;
+    case 'danger': toast.style.background = 'var(--danger)'; break;
+    case 'warning': toast.style.background = 'var(--warning)'; break;
+    default: toast.style.background = 'var(--gray)';
+  }
+
+  container.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => {
+      if (container.contains(toast)) {
+        container.removeChild(toast);
+      }
+    }, 300);
+  }, 3000);
+}
+</script>
+{% endblock %}

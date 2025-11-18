@@ -17,10 +17,10 @@ services:
 
 ## Se atribuir IP fixo, remover essa configuração de ports:      
     ports:
-      - "8000:8000"
       - "53:53/udp"
       - "80:80"
       - "443:443"
+      - "8000:8000"
 
 ## Habilitar configuração se for atribuir IP fixo de rede ao container:
 #     networks:

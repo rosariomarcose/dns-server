@@ -15,6 +15,12 @@
 
   <!-- Ações rápidas -->
   <div class="quick-actions">
+    <a href="{{ url_for('dns_server_settings') }}" class="action-card">
+      <div class="action-icon">🌐</div>
+      <div class="action-title">Configurações DNS</div>
+      <div class="action-desc">Nome do servidor e configurações PTR</div>
+    </a>
+
     <a href="{{ url_for('ssl_ca_settings') }}" class="action-card">
       <div class="action-icon">🏛️</div>
       <div class="action-title">Autoridade Certificadora</div>

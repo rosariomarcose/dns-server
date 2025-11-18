@@ -5,12 +5,20 @@ import json
 import socket
 import subprocess
 import re
-from dnslib import DNSRecord, RR, A, TXT
+from dnslib import DNSRecord, RR, A, TXT, PTR
 from dnslib.server import DNSServer, DNSLogger
 
 DATA_FILE = "/app/data/hosts.json"
 UPSTREAM_DNS = "8.8.8.8"
 UPSTREAM_PORT = 53
+
+# Carregar configurações DNS se existirem
+dns_config_file = "/app/data/dns_config.json"
+if os.path.exists(dns_config_file):
+    with open(dns_config_file, "r") as f:
+        dns_config = json.load(f)
+        UPSTREAM_DNS = dns_config.get("upstream_dns", "8.8.8.8")
+        UPSTREAM_PORT = dns_config.get("upstream_port", 53)
 
 class CustomResolver:
     def __init__(self):
@@ -379,7 +387,7 @@ class CustomResolver:
                 print(f"📄 Usando template: {template_file}")
             except Exception as e:
                 print(f"⚠️ Erro ao ler template {template_file}: {e}")
-        
+
         # Template fallback CORRIGIDO - HTTPS sempre na porta 443
         if not custom_template:
             custom_template = """
@@ -396,16 +404,23 @@ server {
     ssl_certificate_key key_file;
     ssl_protocols TLSv1.2 TLSv1.3;
     location / {
-        proxy_pass http://ip:ssl_port;
+        proxy_pass http://ip:http_port;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Configurações adicionais para melhor compatibilidade
+        proxy_buffering off;
+        proxy_request_buffering off;
+        proxy_http_version 1.1;
+        proxy_set_header Connection "";
+        proxy_ssl_verify off;
     }
 }
 """
             print("📄 Usando template integrado")
-        
+
         # APLICAÇÃO CORRIGIDA das variáveis - substituindo placeholders simples
         config_content = custom_template.replace('domain', domain) \
                                        .replace('ip', ip) \
@@ -739,6 +754,27 @@ server {
         if any(local_domain in qname for local_domain in ['dns-server', 'homolog', 'dev', 'publicacao']):
             print(f"[DEBUG] Query LOCAL recebida: {qname} (type: {qtype})")
 
+        # PTR records para reverse DNS (mostrar nome do servidor no nslookup)
+        if qtype == 12:  # PTR record
+            # Carregar nome do servidor da configuração
+            server_hostname = "dns-server.local"
+            dns_config_file = "/app/data/dns_config.json"
+            if os.path.exists(dns_config_file):
+                with open(dns_config_file, "r") as f:
+                    dns_config = json.load(f)
+                    server_hostname = dns_config.get("server_hostname", "dns-server.local")
+
+            # Mapeamento IP -> Nome para o servidor DNS
+            ptr_records = {
+                "100.4.168.192.in-addr.arpa": server_hostname,
+                "192.168.4.100": server_hostname
+            }
+
+            if qname in ptr_records:
+                reply.add_answer(RR(qname, qtype, rdata=PTR(ptr_records[qname]), ttl=60))
+                print(f"[PTR] {qname} → {ptr_records[qname]}")
+                return reply
+
         # Resposta para consultas TXT com informações SSL
         if qtype == 16:  # TXT record
             ssl_info = self.get_ssl_info(qname)
@@ -798,6 +834,16 @@ def start_dns_server(resolver):
     print("✅ Servidor DNS iniciado em 0.0.0.0:53")
     print("   - Suporte a registros SSL/TXT para hosts locais")
     server.start_thread()
+
+    # Adicionar PTR record para o servidor DNS (reverse DNS)
+    import socket
+    hostname = socket.gethostname()
+    try:
+        # Tentar obter IP do hostname
+        ip_addr = socket.gethostbyname(hostname)
+        print(f"📋 PTR record configurado: {ip_addr} → {hostname}")
+    except Exception as e:
+        print(f"⚠️ Não foi possível configurar PTR record: {e}")
 
 def health_monitor(resolver):
     print("🩺 Monitor de saúde iniciado (a cada 30s)")

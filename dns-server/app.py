@@ -811,6 +811,58 @@ def ssl_settings():
                           ssl_config=resolver.ssl_config,
                           user=session["user"])
 
+@app.route("/dns-server-settings", methods=["GET", "POST"])
+@login_required
+def dns_server_settings():
+    """Configurações do servidor DNS"""
+    if not session.get("is_admin"):
+        flash("Acesso negado. Somente administrador.", "danger")
+        return redirect("/")
+
+    if request.method == "POST":
+        server_hostname = request.form.get("server_hostname", "").strip()
+        upstream_dns = request.form.get("upstream_dns", "").strip()
+        upstream_port = int(request.form.get("upstream_port", 53))
+
+        # Salvar configurações DNS
+        dns_config = {
+            "server_hostname": server_hostname,
+            "server_ip": "192.168.4.100",  # IP fixo do servidor
+            "upstream_dns": upstream_dns,
+            "upstream_port": upstream_port
+        }
+
+        # Salvar no arquivo de configuração
+        dns_config_file = "/app/data/dns_config.json"
+        with open(dns_config_file, "w") as f:
+            json.dump(dns_config, f, indent=2)
+
+        # Atualizar variáveis globais
+        global UPSTREAM_DNS, UPSTREAM_PORT
+        UPSTREAM_DNS = upstream_dns
+        UPSTREAM_PORT = upstream_port
+
+        flash("Configurações DNS salvas com sucesso!", "success")
+        return redirect("/dns-server-settings")
+
+    # Carregar configurações atuais
+    dns_config_file = "/app/data/dns_config.json"
+    if os.path.exists(dns_config_file):
+        with open(dns_config_file, "r") as f:
+            dns_config = json.load(f)
+    else:
+        dns_config = {
+            "server_hostname": "dns-server.local",
+            "server_ip": "192.168.4.100",
+            "upstream_dns": "8.8.8.8",
+            "upstream_port": 53
+        }
+
+    return render_template("dns_server_settings.html",
+                          dns_config=dns_config,
+                          user=session["user"],
+                          is_admin=session.get("is_admin", False))
+
 @app.route("/ssl-ca-settings", methods=["GET", "POST"])
 @login_required
 def ssl_ca_settings():

@@ -14,20 +14,29 @@ services:
     cap_add:
       - NET_ADMIN
       - NET_RAW
-    networks:
-      lan:
-        ipv4_address: 192.168.5.248
+
+## Se atribuir IP fixo, remover essa configuração de ports:      
     ports:
       - "8000:8000"
       - "53:53/udp"
+      - "80:80"
+      - "443:443"
 
-networks:
-  lan:
-    driver: macvlan
-    driver_opts:
-      parent: enX0
-    ipam:
-      config:
-        - subnet: 192.168.4.0/23
-          gateway: 192.168.5.1
-          ip_range: 192.168.5.240/29
+## Habilitar configuração se for atribuir IP fixo de rede ao container:
+#     networks:
+#       lan:
+#         ipv4_address: 192.168.5.248
+#     ports:
+#       - "8000:8000"
+#       - "53:53/udp"
+
+# networks:
+#   lan:
+#     driver: macvlan
+#     driver_opts:
+#       parent: enX0
+#     ipam:
+#       config:
+#         - subnet: 192.168.4.0/23
+#           gateway: 192.168.5.1
+#           ip_range: 192.168.5.240/29

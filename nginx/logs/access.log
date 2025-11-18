@@ -6101,3 +6101,8 @@
 192.168.5.215 - - [17/Nov/2025:19:57:31 +0000] "GET / HTTP/1.1" 400 657 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
 192.168.5.248 - - [17/Nov/2025:19:57:31 +0000] "GET /favicon.ico HTTP/1.0" 400 657 "https://dns-resolver.localhost.com.br/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
 192.168.5.215 - - [17/Nov/2025:19:57:31 +0000] "GET /favicon.ico HTTP/1.1" 400 657 "https://dns-resolver.localhost.com.br/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+192.168.4.135 - - [17/Nov/2025:20:34:06 +0000] "OPTIONS /e HTTP/1.1" 301 169 "-" "Microsoft-WebDAV-MiniRedir/10.0.19045"
+192.168.5.248 - - [18/Nov/2025:11:01:44 +0000] "GET / HTTP/1.0" 400 657 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+192.168.5.215 - - [18/Nov/2025:11:01:44 +0000] "GET / HTTP/1.1" 400 657 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+192.168.5.248 - - [18/Nov/2025:11:01:44 +0000] "GET /favicon.ico HTTP/1.0" 400 657 "https://dns-resolver.localhost.com.br/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+192.168.5.215 - - [18/Nov/2025:11:01:44 +0000] "GET /favicon.ico HTTP/1.1" 400 657 "https://dns-resolver.localhost.com.br/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"

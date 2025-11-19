@@ -1003,7 +1003,7 @@ def download_ca_cert():
 if __name__ == "__main__":
     print("""
     ⚡ DNS SERVER - LAN
-    📊 Painel: http://192.168.5.248:8000
+    📊 Painel: http://192.168.4.100:443
     🌐 DNS:    127.0.0.1:53
     """)
     app.run(host="0.0.0.0", port=8000, debug=True)

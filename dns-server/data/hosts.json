@@ -1,14 +1,6 @@
 {
-  "hosts": {
-    "dns-resolver.local.com.br": "192.168.4.100"
-  },
-  "ssl_enabled": {
-    "dns-resolver.local.com.br": true
-  },
-  "ssl_ports": {
-    "dns-resolver.local.com.br": 443
-  },
-  "http_ports": {
-    "dns-resolver.local.com.br": 8000
-  }
+  "hosts": {},
+  "ssl_enabled": {},
+  "ssl_ports": {},
+  "http_ports": {}
 }

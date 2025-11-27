@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
 RUN apt update && apt install -y certbot \
-    nginx openssl iputils-ping curl dnsutils net-tools bash procps \
+    nginx openssl iputils-ping curl dnsutils net-tools bash procps whois \
     && rm -rf /var/lib/apt/lists/* \
     && apt clean
 

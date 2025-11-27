@@ -4,3 +4,4 @@ nginx/etc/nginx/ssl/sites-enabled/*
 nginx/etc/nginx/logs/*
 
 dns-server/data/*
+*.log

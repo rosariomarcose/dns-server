@@ -9,7 +9,7 @@ from dnslib import DNSRecord, RR, A, TXT, PTR
 from dnslib.server import DNSServer, DNSLogger
 
 DATA_FILE = "/app/data/hosts.json"
-UPSTREAM_DNS = "8.8.8.8"
+UPSTREAM_DNS = ["8.8.8.8"]
 UPSTREAM_PORT = 53
 
 # Carregar configurações DNS se existirem
@@ -17,7 +17,11 @@ dns_config_file = "/app/data/dns_config.json"
 if os.path.exists(dns_config_file):
     with open(dns_config_file, "r") as f:
         dns_config = json.load(f)
-        UPSTREAM_DNS = dns_config.get("upstream_dns", "8.8.8.8")
+        upstream_dns = dns_config.get("upstream_dns", "8.8.8.8")
+        if isinstance(upstream_dns, list):
+            UPSTREAM_DNS = upstream_dns
+        else:
+            UPSTREAM_DNS = [upstream_dns]
         UPSTREAM_PORT = dns_config.get("upstream_port", 53)
 
 class CustomResolver:
@@ -750,9 +754,6 @@ server {
         qtype = request.q.qtype
         reply = request.reply()
 
-        # Debug: mostrar queries para domínios locais
-        if any(local_domain in qname for local_domain in ['dns-server', 'homolog', 'dev', 'publicacao']):
-            print(f"[DEBUG] Query LOCAL recebida: {qname} (type: {qtype})")
 
         # PTR records para reverse DNS (mostrar nome do servidor no nslookup)
         if qtype == 12:  # PTR record
@@ -805,15 +806,27 @@ server {
 
         # Consulta externa (proxy recursivo) - APENAS se não for local
         try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.settimeout(3)
-            sock.sendto(request.pack(), (UPSTREAM_DNS, UPSTREAM_PORT))
-            data, _ = sock.recvfrom(4096)
-            sock.close()
-            print(f"[UPSTREAM] {qname} via {UPSTREAM_DNS}")
-            return DNSRecord.parse(data)
+            # Tentar múltiplos servidores upstream com fallback
+            for dns_server in UPSTREAM_DNS:
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sock.settimeout(2)  # Timeout menor por servidor
+                    sock.sendto(request.pack(), (dns_server, UPSTREAM_PORT))
+                    data, _ = sock.recvfrom(4096)
+                    sock.close()
+                    print(f"[UPSTREAM] {qname} via {dns_server}")
+                    return DNSRecord.parse(data)
+                except Exception as e:
+                    print(f"[FALHA] {qname} via {dns_server}: {e}")
+                    continue
+
+            # Se todos os servidores falharam
+            print(f"[FALHA TOTAL] {qname} → todos os upstream falharam")
+            reply.header.rcode = 3  # NXDOMAIN
+            return reply
+
         except Exception as e:
-            print(f"[FALHA] {qname} → erro ao consultar {UPSTREAM_DNS}: {e}")
+            print(f"[FALHA] {qname} → erro ao consultar upstream: {e}")
             reply.header.rcode = 3  # NXDOMAIN
             return reply
 
